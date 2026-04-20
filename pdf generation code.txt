@@ -1,0 +1,429 @@
+import { NextResponse } from 'next/server'
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+
+export async function POST(req: Request) {
+  const { content, title, coverImageUrl } = await req.json()
+
+  try {
+    const pdfDoc = await PDFDocument.create()
+
+    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica)
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+    const pageWidth = 595
+    const pageHeight = 842
+    const margin = 60
+
+    const primary = rgb(0.35, 0.29, 0.9)
+    const dark = rgb(0.12, 0.12, 0.12)
+    const gray = rgb(0.45, 0.45, 0.45)
+    const light = rgb(0.95, 0.95, 0.98)
+
+    let pageCount = 1
+
+    // ---------------------------
+    // CLEAN TEXT HELPERS
+    // ---------------------------
+
+    const cleanText = (text: string) => {
+      return (text || '')
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '')
+        .replace(/`/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    }
+
+    const wrapParagraphs = (text: string) => {
+      return cleanText(text)
+        .split('\n')
+        .map(p => p.trim())
+        .filter(Boolean)
+    }
+
+    const wrapText = (text: string, font: any, size: number, maxWidth: number) => {
+      const words = text.split(' ')
+      const lines: string[] = []
+      let line = ''
+
+      for (const word of words) {
+        const test = line ? `${line} ${word}` : word
+
+        if (font.widthOfTextAtSize(test, size) < maxWidth) {
+          line = test
+        } else {
+          lines.push(line)
+          line = word
+        }
+      }
+
+      if (line) lines.push(line)
+      return lines
+    }
+
+    // ---------------------------
+    // IMAGE FETCH (Unsplash)
+    // ---------------------------
+
+    async function fetchImage(query: string) {
+      try {
+        const res = await fetch(
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1`,
+          {
+            headers: {
+              Authorization: `Client-ID ${process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY}`,
+            },
+          }
+        )
+
+        const data = await res.json()
+        return data?.results?.[0]?.urls?.regular || null
+      } catch {
+        return null
+      }
+    }
+
+    // ---------------------------
+    // TEXT DRAWER (KINDLE STYLE)
+    // ---------------------------
+
+    const drawText = (
+      page: any,
+      text: string,
+      x: number,
+      y: number,
+      font: any,
+      size: number,
+      color: any,
+      maxWidth: number,
+      lineHeight: number
+    ) => {
+      const paragraphs = wrapParagraphs(text)
+
+      for (const paragraph of paragraphs) {
+        const lines = wrapText(paragraph, font, size, maxWidth)
+
+        for (const line of lines) {
+          page.drawText(line, { x, y, size, font, color })
+          y -= lineHeight
+        }
+
+        y -= lineHeight * 0.6 // paragraph spacing
+      }
+
+      return y
+    }
+
+    const drawFooter = (page: any) => {
+      page.drawText(`${pageCount}`, {
+        x: pageWidth - margin,
+        y: 20,
+        size: 10,
+        font: fontRegular,
+        color: gray,
+      })
+    }
+
+    // ---------------------------
+    // 1. COVER PAGE (PREMIUM)
+    // ---------------------------
+
+    const cover = pdfDoc.addPage([pageWidth, pageHeight])
+
+    cover.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pageWidth,
+      height: pageHeight,
+      color: rgb(0.05, 0.05, 0.1),
+    })
+
+    if (coverImageUrl) {
+      try {
+        const imgBytes = await fetch(coverImageUrl).then(r => r.arrayBuffer())
+        const img = await pdfDoc.embedJpg(imgBytes)
+
+        cover.drawImage(img, {
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+        })
+      } catch {}
+    }
+
+    cover.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pageWidth,
+      height: pageHeight,
+      color: rgb(0, 0, 0),
+      opacity: 0.55,
+    })
+
+    cover.drawText('DIGIFORGE AI', {
+      x: margin,
+      y: pageHeight - 80,
+      size: 14,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    })
+
+    cover.drawText(content.title, {
+      x: margin,
+      y: pageHeight - 220,
+      size: 38,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    })
+
+    cover.drawText(content.subtitle, {
+      x: margin,
+      y: pageHeight - 270,
+      size: 16,
+      font: fontRegular,
+      color: rgb(0.85, 0.85, 0.85),
+    })
+
+    // ---------------------------
+    // 2. TABLE OF CONTENTS
+    // ---------------------------
+
+    let page = pdfDoc.addPage([pageWidth, pageHeight])
+    let currentY = pageHeight - 80
+
+    page.drawText('TABLE OF CONTENTS', {
+      x: margin,
+      y: currentY,
+      size: 18,
+      font: fontBold,
+      color: dark,
+    })
+
+    currentY -= 40
+
+    content.chapters.forEach((ch: any, i: number) => {
+      page.drawText(
+        `${String(i + 1).padStart(2, '0')}. ${ch.title}`,
+        {
+          x: margin,
+          y: currentY,
+          size: 12,
+          font: fontRegular,
+          color: gray,
+        }
+      )
+
+      currentY -= 24
+    })
+
+    drawFooter(page)
+    pageCount++
+
+    // ---------------------------
+    // 3. INTRODUCTION
+    // ---------------------------
+
+    page = pdfDoc.addPage([pageWidth, pageHeight])
+    currentY = pageHeight - 80
+
+    page.drawText('INTRODUCTION', {
+      x: margin,
+      y: currentY,
+      size: 18,
+      font: fontBold,
+      color: primary,
+    })
+
+    currentY -= 30
+
+    currentY = drawText(
+      page,
+      content.introduction,
+      margin,
+      currentY,
+      fontRegular,
+      12,
+      dark,
+      pageWidth - margin * 2,
+      20
+    )
+
+    drawFooter(page)
+    pageCount++
+
+    // ---------------------------
+    // 4. CHAPTERS (WITH IMAGES)
+    // ---------------------------
+
+    for (const [i, ch] of content.chapters.entries()) {
+      page = pdfDoc.addPage([pageWidth, pageHeight])
+      currentY = pageHeight - 80
+
+      // header
+      page.drawText(content.title, {
+        x: margin,
+        y: currentY,
+        size: 10,
+        font: fontRegular,
+        color: gray,
+      })
+
+      currentY -= 40
+
+      // chapter label
+      page.drawText(`CHAPTER ${i + 1}`, {
+        x: margin,
+        y: currentY,
+        size: 12,
+        font: fontBold,
+        color: primary,
+      })
+
+      currentY -= 30
+
+      // title
+      page.drawText(ch.title, {
+        x: margin,
+        y: currentY,
+        size: 20,
+        font: fontBold,
+        color: dark,
+      })
+
+      currentY -= 40
+
+      // chapter image
+      const imageUrl = await fetchImage(ch.imageQuery || ch.title)
+
+      if (imageUrl) {
+        try {
+          const imgBytes = await fetch(imageUrl).then(r => r.arrayBuffer())
+          const img = await pdfDoc.embedJpg(imgBytes)
+
+          const imgHeight = 170
+
+          page.drawImage(img, {
+            x: margin,
+            y: currentY - imgHeight,
+            width: pageWidth - margin * 2,
+            height: imgHeight,
+          })
+
+          currentY -= imgHeight + 25
+        } catch {}
+      }
+
+      // content
+      currentY = drawText(
+        page,
+        ch.content,
+        margin,
+        currentY,
+        fontRegular,
+        12,
+        gray,
+        pageWidth - margin * 2,
+        20
+      )
+
+      currentY -= 20
+
+      // tips box
+      if (ch.tips?.length) {
+        page.drawRectangle({
+          x: margin,
+          y: currentY - 10,
+          width: pageWidth - margin * 2,
+          height: 70,
+          color: light,
+        })
+
+        currentY -= 20
+
+        ch.tips.forEach((tip: string) => {
+          page.drawText(`• ${cleanText(tip)}`, {
+            x: margin + 10,
+            y: currentY,
+            size: 10,
+            font: fontRegular,
+            color: dark,
+          })
+
+          currentY -= 14
+        })
+      }
+
+      drawFooter(page)
+      pageCount++
+    }
+
+    // ---------------------------
+    // 5. CONCLUSION
+    // ---------------------------
+
+    page = pdfDoc.addPage([pageWidth, pageHeight])
+    currentY = pageHeight - 80
+
+    page.drawText('CONCLUSION', {
+      x: margin,
+      y: currentY,
+      size: 18,
+      font: fontBold,
+      color: primary,
+    })
+
+    currentY -= 30
+
+    currentY = drawText(
+      page,
+      content.conclusion,
+      margin,
+      currentY,
+      fontRegular,
+      12,
+      dark,
+      pageWidth - margin * 2,
+      20
+    )
+
+    currentY -= 40
+
+    page.drawRectangle({
+      x: margin,
+      y: currentY,
+      width: pageWidth - margin * 2,
+      height: 60,
+      color: light,
+    })
+
+    page.drawText(cleanText(content.callToAction), {
+      x: margin + 10,
+      y: currentY + 25,
+      size: 12,
+      font: fontBold,
+      color: primary,
+    })
+
+    drawFooter(page)
+
+    // ---------------------------
+    // EXPORT
+    // ---------------------------
+
+    const pdfBytes = await pdfDoc.save()
+
+    return new NextResponse(pdfBytes, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${title.replace(/\s+/g, '_')}.pdf"`,
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return NextResponse.json(
+      { error: 'PDF generation failed' },
+      { status: 500 }
+    )
+  }
+}
