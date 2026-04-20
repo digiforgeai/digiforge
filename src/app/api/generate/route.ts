@@ -5,29 +5,58 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY!
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * GROQ CALLER (NO SDK)
+ * GROQ CALLER
  */
 async function callGroq(prompt: string) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.6,
-      max_tokens: 2500,
-    }),
-  })
+  const res = await fetch(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 1500, // 🔥 reduced for stability
+      }),
+    }
+  )
 
   const data = await res.json()
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Groq request failed')
+  }
+
   return data.choices?.[0]?.message?.content || ''
 }
 
 /**
- * SAFE JSON PARSER
+ * SAFE RETRY WRAPPER
+ */
+async function callAI(prompt: string, retries = 3) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await callGroq(prompt)
+    } catch (err: any) {
+      console.log(`Retry ${i + 1} failed`)
+
+      await sleep(1500 + i * 1500)
+
+      if (i === retries) {
+        return '' // 🔥 never crash whole flow
+      }
+    }
+  }
+
+  return ''
+}
+
+/**
+ * SAFE JSON
  */
 function safeJSON(raw: string) {
   try {
@@ -39,7 +68,9 @@ function safeJSON(raw: string) {
     const start = cleaned.indexOf('{')
     const end = cleaned.lastIndexOf('}')
 
-    if (start === -1 || end === -1) throw new Error('No JSON found')
+    if (start === -1 || end === -1) {
+      return { title: 'Generated Guide', subtitle: '' }
+    }
 
     cleaned = cleaned.slice(start, end + 1)
 
@@ -49,61 +80,57 @@ function safeJSON(raw: string) {
 
     return JSON.parse(cleaned)
   } catch {
-    throw new Error('JSON parse failed')
+    return { title: 'Generated Guide', subtitle: '' }
   }
-}
-
-/**
- * AI CALL WITH RETRY
- */
-async function callAI(prompt: string, retries = 2) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await callGroq(prompt)
-    } catch (err: any) {
-      if (err?.status === 429) {
-        await sleep(2000 + i * 2000)
-      } else {
-        throw err
-      }
-    }
-  }
-
-  throw new Error('AI failed after retries')
 }
 
 /**
  * PROMPTS
  */
-const buildIntroPrompt = (idea: any) => `
+function introPrompt(idea: any) {
+  return `
 Write a detailed ebook introduction.
 
 Title: ${idea.title}
 Audience: ${idea.targetAudience}
 Tone: ${idea.tone || 'Professional'}
 
-Make it 3–5 deep paragraphs.
+Requirements:
+- 4 paragraphs minimum
+- Engaging storytelling
+- Clear context
 `
+}
 
-const buildChapterPrompt = (idea: any, i: number, total: number) => `
-Write Chapter ${i} of ${total}.
+function chapterPrompt(idea: any, i: number, total: number) {
+  return `
+Write Chapter ${i} of ${total} for a premium ebook.
 
 Title: ${idea.title}
 Audience: ${idea.targetAudience}
 Tone: ${idea.tone || 'Professional'}
 
 Requirements:
-- Very detailed (6+ paragraphs)
-- Examples + explanations
-- Educational depth
+- 6–8 paragraphs
+- Deep explanations
+- Real-world examples
+- Educational + practical
 `
+}
 
-const buildConclusionPrompt = (idea: any) => `
-Write a strong conclusion + CTA.
+function conclusionPrompt(idea: any) {
+  return `
+Write a powerful conclusion and call-to-action.
 
 Title: ${idea.title}
 Audience: ${idea.targetAudience}
+
+Requirements:
+- 3–4 paragraphs
+- Motivational ending
+- Clear action steps
 `
+}
 
 /**
  * MAIN ROUTE
@@ -128,31 +155,62 @@ Topic: ${idea.title}
     const meta = safeJSON(metaRaw)
 
     // 2. INTRO
-    const introduction = await callAI(buildIntroPrompt(idea))
+    const introduction = await callAI(introPrompt(idea))
 
-    // 3. CHAPTERS
-    const chapters = []
+    // 3. CHAPTERS (🔥 CONTROLLED BATCH MODE)
+    const chapters: any[] = []
 
-    for (let i = 1; i <= chaptersCount; i++) {
-      const content = await callAI(buildChapterPrompt(idea, i, chaptersCount))
+    const batchSize = 2
 
-      chapters.push({
-        title: `Chapter ${i}`,
-        content,
-        tips: [
-          'Apply consistently',
-          'Practice daily',
-          'Test in real scenarios',
-        ],
+    for (let i = 0; i < chaptersCount; i += batchSize) {
+      const batchPromises = Array.from({ length: batchSize }, (_, j) => {
+        const chapterIndex = i + j + 1
+        if (chapterIndex > chaptersCount) return null
+
+        return callAI(chapterPrompt(idea, chapterIndex, chaptersCount))
+      }).filter(Boolean) as Promise<string>[]
+
+      const results = await Promise.allSettled(batchPromises)
+
+      results.forEach((res, idx) => {
+        const chapterIndex = i + idx + 1
+
+        if (res.status === 'fulfilled' && res.value) {
+          chapters.push({
+            title: `Chapter ${chapterIndex}`,
+            content: res.value,
+            tips: [
+              'Apply consistently',
+              'Practice daily',
+              'Test in real scenarios',
+            ],
+          })
+        } else {
+          chapters.push({
+            title: `Chapter ${chapterIndex}`,
+            content:
+              'This chapter failed to generate properly due to API limits.',
+            tips: [],
+          })
+        }
       })
 
-      await sleep(800)
+      await sleep(2000) // 🔥 prevents Groq overload
     }
 
-    // 4. CONCLUSION
-    const conclusion = await callAI(buildConclusionPrompt(idea))
+    // 4. CONCLUSION (GUARANTEED)
+    let conclusion = await callAI(conclusionPrompt(idea))
 
-    // 5. FINAL OUTPUT
+    if (!conclusion) {
+      conclusion = `
+This ebook is about execution.
+
+Knowledge means nothing without action.
+Start applying what you learned step by step.
+`
+    }
+
+    // 5. FINAL RESPONSE
     return NextResponse.json({
       content: {
         title: meta.title || idea.title,
@@ -160,11 +218,13 @@ Topic: ${idea.title}
         introduction,
         chapters,
         conclusion,
-        callToAction: 'Start applying these strategies today.',
+        callToAction:
+          'Start applying these strategies today and build momentum.',
       },
     })
   } catch (e) {
-    console.error('GEN ERROR:', e)
+    console.error('GENERATION ERROR:', e)
+
     return NextResponse.json(
       { error: 'Content generation failed' },
       { status: 500 }
