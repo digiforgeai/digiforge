@@ -89,7 +89,7 @@ export async function POST(req: Request) {
         const systemPrompt = `You are a professional ebook writer. You always follow instructions exactly.
 When asked to return JSON, you ONLY return raw JSON. No markdown. No backticks. No explanation.
 Your response starts with { and ends with }. Nothing before or after.
-You NEVER use ** or * for emphasis in any text values. Write plain sentences only.`
+You NEVER use ** or * for emphasis in any text values. Write plain sentences only. Do not use AI language or jargon`
 
         // ── META ──
         send('progress', { step: 'Reading your customizations...' })
