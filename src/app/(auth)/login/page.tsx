@@ -104,7 +104,7 @@ export default function LoginPage() {
           <div>
             <div className="flex justify-between items-center mb-2">
               <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest">Password</label>
-              <Link href="/forgot-password" size="sm" className="text-[10px] text-zinc-600 hover:text-indigo-400 font-black uppercase tracking-widest transition">
+              <Link href="/forgot-password" className="text-[10px] text-zinc-600 hover:text-indigo-400 font-black uppercase tracking-widest transition">
                 Lost Key?
               </Link>
             </div>
