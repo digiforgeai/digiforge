@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Zap, Mail, Lock, Eye, EyeOff, User } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('')
@@ -17,7 +18,7 @@ export default function SignupPage() {
 
   const handleSignup = async () => {
     if (!email || !password || !fullName) return
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+    if (password.length < 8) { setError('Access Key must be at least 8 characters'); return }
     setLoading(true)
     setError('')
     const { error } = await supabase.auth.signUp({
@@ -42,22 +43,23 @@ export default function SignupPage() {
 
   if (success) {
     return (
-      <div className="w-full min-h-screen bg-[#f4f6fb] flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full max-w-md text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-8 h-8 text-green-600" />
+      <div className="w-full min-h-screen bg-[#0d0f14] flex items-center justify-center px-4 relative overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/10 blur-[120px] pointer-events-none" />
+        <div className="bg-zinc-900/50 backdrop-blur-xl rounded-[2.5rem] border border-white/5 p-10 w-full max-w-md text-center relative z-10">
+          <div className="w-20 h-20 bg-indigo-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-indigo-500/20">
+            <Mail className="w-10 h-10 text-indigo-400" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
-          <p className="text-gray-500 text-sm mb-6">
-            We sent a confirmation link to{' '}
-            <span className="font-semibold text-gray-700">{email}</span>.
-            Click it to activate your account.
+          <h2 className="text-xl font-black text-white mb-3 uppercase tracking-tighter">Check your inbox</h2>
+          <p className="text-zinc-500 text-xs leading-relaxed mb-8 font-medium">
+            A confirmation link has been dispatched to <br/>
+            <span className="text-indigo-300">{email}</span>. <br/>
+            Activate it to enter the Forge.
           </p>
           <Link
             href="/login"
-            className="text-indigo-600 font-semibold text-sm hover:underline cursor-pointer"
+            className="text-indigo-400 font-black text-[10px] uppercase tracking-[0.2em] hover:text-indigo-300 transition"
           >
-            ← Back to Sign In
+            ← Return to Entry
           </Link>
         </div>
       </div>
@@ -65,110 +67,122 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#f4f6fb] flex items-center justify-center px-4 py-12">
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full max-w-md">
+    <div className="w-full min-h-screen bg-[#0d0f14] flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Background Glows */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-indigo-600/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-purple-600/5 blur-[120px] pointer-events-none" />
 
+      <div className="bg-zinc-900/50 backdrop-blur-xl rounded-[2.5rem] border border-white/5 p-10 w-full max-w-md shadow-2xl relative z-10">
+        
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 mb-8 justify-center cursor-pointer">
-          <div className="bg-indigo-600 rounded-lg p-1.5">
-            <Zap className="w-4 h-4 text-white" fill="white" />
+        <Link href="/" className="flex flex-col items-center gap-4 mb-10 justify-center cursor-pointer group">
+          <div className="rounded-2xl p-2 shadow-lg shadow-indigo-600/20 group-hover:rotate-6 transition-transform">
+            <Image 
+              src="/digiforge_logo.png" 
+              alt="DigiForge Logo" 
+              width={28} 
+              height={28} 
+              className="object-contain"
+            />
           </div>
-          <span className="font-bold text-gray-900 text-lg">DigiForgeAI</span>
+          <div className="text-center">
+            <span className="font-black text-white text-xl tracking-tighter uppercase">
+              DigiForge<span className="text-indigo-500">AI</span>
+            </span>
+            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em] mt-1">Join the Studio</p>
+          </div>
         </Link>
 
-        <h1 className="text-2xl font-bold text-gray-900 text-center mb-1">Create your account</h1>
-        <p className="text-gray-500 text-sm text-center mb-8">Start building Digital Products today — free</p>
-
-        {/* Google */}
+        {/* Google Signup */}
         <button
           onClick={handleGoogle}
-          className="w-full border border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-3 flex items-center justify-center gap-3 text-sm font-medium text-gray-700 transition cursor-pointer mb-5"
+          className="w-full bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 rounded-2xl py-4 flex items-center justify-center gap-3 text-xs font-black text-white transition-all cursor-pointer mb-6 uppercase tracking-widest"
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
+         <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
-          Continue with Google
+          Google Account
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400">or continue with email</span>
-          <div className="flex-1 h-px bg-gray-200" />
+        <div className="flex items-center gap-4 mb-8">
+          <div className="flex-1 h-px bg-white/5" />
+          <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">Manual Setup</span>
+          <div className="flex-1 h-px bg-white/5" />
         </div>
 
-        {/* Fields */}
-        <div className="space-y-4 mb-5">
+        {/* Form Fields */}
+        <div className="space-y-5 mb-8">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Full name</label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <label className="block text-[10px] font-black text-zinc-500 mb-2 uppercase tracking-widest">Full Name</label>
+            <div className="relative group">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type="text"
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
-                placeholder="Oscar Nartey"
-                className="w-full border-2 border-gray-200 focus:border-indigo-500 rounded-xl pl-10 pr-4 py-3 text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white outline-none transition cursor-text"
+                placeholder="YOUR NAME"
+                className="w-full bg-white/5 border border-white/5 focus:border-indigo-500/50 rounded-2xl pl-12 pr-4 py-4 text-sm text-white placeholder:text-zinc-700 outline-none transition"
               />
             </div>
           </div>
+          
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <label className="block text-[10px] font-black text-zinc-500 mb-2 uppercase tracking-widest">Forge ID (Email)</label>
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full border-2 border-gray-200 focus:border-indigo-500 rounded-xl pl-10 pr-4 py-3 text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white outline-none transition cursor-text"
+                placeholder="EMAIL ADDRESS"
+                className="w-full bg-white/5 border border-white/5 focus:border-indigo-500/50 rounded-2xl pl-12 pr-4 py-4 text-sm text-white placeholder:text-zinc-700 outline-none transition"
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <label className="block text-[10px] font-black text-zinc-500 mb-2 uppercase tracking-widest">Access Key (8+ Char)</label>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSignup()}
-                placeholder="Min. 8 characters"
-                className="w-full border-2 border-gray-200 focus:border-indigo-500 rounded-xl pl-10 pr-10 py-3 text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white outline-none transition cursor-text"
+                placeholder="MIN 8 CHARACTERS"
+                className="w-full bg-white/5 border border-white/5 focus:border-indigo-500/50 rounded-2xl pl-12 pr-12 py-4 text-sm text-white placeholder:text-zinc-700 outline-none transition"
               />
               <button
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600 transition cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white transition cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            {/* Password strength indicator */}
+            
+            {/* Strength bar matched to dark theme */}
             {password.length > 0 && (
-              <div className="mt-2 flex gap-1">
-                {[1,2,3,4].map(i => (
+              <div className="mt-3 flex gap-1.5 items-center">
+                {[1, 2, 3, 4].map(i => (
                   <div
                     key={i}
                     className={`h-1 flex-1 rounded-full transition-all ${
-                      password.length >= i * 3
-                        ? password.length >= 10 ? 'bg-green-400' : password.length >= 7 ? 'bg-yellow-400' : 'bg-red-400'
-                        : 'bg-gray-200'
+                      password.length >= i * 2.5
+                        ? password.length >= 10 ? 'bg-indigo-400' : 'bg-indigo-400/40'
+                        : 'bg-white/5'
                     }`}
                   />
                 ))}
-                <span className="text-xs text-gray-400 ml-1">
-                  {password.length >= 10 ? 'Strong' : password.length >= 7 ? 'Good' : 'Weak'}
-                </span>
               </div>
             )}
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-3 text-sm mb-4">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl p-4 text-xs font-bold mb-6 text-center tracking-wide">
             {error}
           </div>
         )}
@@ -176,22 +190,27 @@ export default function SignupPage() {
         <button
           onClick={handleSignup}
           disabled={loading || !email || !password || !fullName}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl text-sm transition cursor-pointer"
+          className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl text-xs transition-all cursor-pointer uppercase tracking-[0.2em] shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 group"
         >
-          {loading ? 'Creating account...' : 'Create Free Account →'}
+          {loading ? 'Processing...' : (
+            <>
+              Create Account
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </>
+          )}
         </button>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
-          By signing up you agree to our{' '}
-          <Link href="/terms" className="text-indigo-600 hover:underline cursor-pointer">Terms</Link>
-          {' '}and{' '}
-          <Link href="/privacy" className="text-indigo-600 hover:underline cursor-pointer">Privacy Policy</Link>
+        <p className="text-center text-[10px] text-zinc-600 font-black uppercase tracking-[0.2em] mt-8 leading-relaxed">
+          By joining, you agree to our <br/>
+          <Link href="/terms" className="text-zinc-400 hover:text-white transition underline underline-offset-4 mx-1">Terms</Link>
+          &
+          <Link href="/privacy" className="text-zinc-400 hover:text-white transition underline underline-offset-4 mx-1">Privacy</Link>
         </p>
 
-        <p className="text-center text-sm text-gray-500 mt-4">
-          Already have an account?{' '}
-          <Link href="/login" className="text-indigo-600 font-semibold hover:underline cursor-pointer">
-            Sign in
+        <p className="text-center text-[11px] text-zinc-600 font-black uppercase tracking-widest mt-8 pt-8 border-t border-white/5">
+          Already a member?{' '}
+          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 transition">
+            Sign In
           </Link>
         </p>
       </div>

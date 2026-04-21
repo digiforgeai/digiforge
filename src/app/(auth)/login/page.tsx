@@ -1,17 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Zap, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
+import { useSearchParams } from 'next/navigation'
 
 export default function LoginPage() {
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const supabase = createClient()
+
+  // Catch the email if it was passed from the footer newsletter
+  useEffect(() => {
+    const emailParam = searchParams.get('email')
+    if (emailParam) setEmail(emailParam)
+  }, [searchParams])
 
   const handleLogin = async () => {
     if (!email || !password) return
@@ -31,24 +40,36 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#f4f6fb] flex items-center justify-center px-4 py-12">
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full max-w-md">
+    <div className="w-full min-h-screen bg-[#0d0f14] flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Background Glows to match landing page */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600/5 blur-[120px] pointer-events-none" />
 
+      <div className="bg-zinc-900/50 backdrop-blur-xl rounded-[2.5rem] border border-white/5 p-10 w-full max-w-md shadow-2xl relative z-10">
+        
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 mb-8 justify-center cursor-pointer">
-          <div className="bg-indigo-600 rounded-lg p-1.5">
-            <Zap className="w-4 h-4 text-white" fill="white" />
+        <Link href="/" className="flex flex-col items-center gap-4 mb-10 justify-center cursor-pointer group">
+          <div className="rounded-2xl p-2 shadow-lg shadow-indigo-600/20 group-hover:rotate-6 transition-transform">
+            <Image 
+              src="/digiforge_logo.png" 
+              alt="DigiForge Logo" 
+              width={28} 
+              height={28} 
+              className="object-contain"
+            />
           </div>
-          <span className="font-bold text-gray-900 text-lg">DigiForgeAI</span>
+          <div className="text-center">
+            <span className="font-black text-white text-xl tracking-tighter uppercase">
+              DigiForge<span className="text-indigo-500">AI</span>
+            </span>
+            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em] mt-1">Login</p>
+          </div>
         </Link>
 
-        <h1 className="text-2xl font-bold text-gray-900 text-center mb-1">Welcome back</h1>
-        <p className="text-gray-500 text-sm text-center mb-8">Sign in to your DigiForgeAI account</p>
-
-        {/* Google */}
+        {/* Google Login - The "Social" Button */}
         <button
           onClick={handleGoogle}
-          className="w-full border border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl py-3 flex items-center justify-center gap-3 text-sm font-medium text-gray-700 transition cursor-pointer mb-5"
+          className="w-full bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 rounded-2xl py-4 flex items-center justify-center gap-3 text-xs font-black text-white transition-all cursor-pointer mb-6 uppercase tracking-widest"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -56,45 +77,50 @@ export default function LoginPage() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
-          Continue with Google
+          Google Account
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400">or continue with email</span>
-          <div className="flex-1 h-px bg-gray-200" />
+        <div className="flex items-center gap-4 mb-8">
+          <div className="flex-1 h-px bg-white/5" />
+          <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">Secure Email Entry</span>
+          <div className="flex-1 h-px bg-white/5" />
         </div>
 
-        {/* Fields */}
-        <div className="space-y-4 mb-5">
+        {/* Input Fields */}
+        <div className="space-y-5 mb-6">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <label className="block text-[10px] font-black text-zinc-500 mb-2 uppercase tracking-widest">Email</label>
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full border-2 border-gray-200 focus:border-indigo-500 rounded-xl pl-10 pr-4 py-3 text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white outline-none transition cursor-text"
+                placeholder="EMAIL ADDRESS"
+                className="w-full bg-white/5 border border-white/5 focus:border-indigo-500/50 rounded-2xl pl-12 pr-4 py-4 text-sm text-white placeholder:text-zinc-700 outline-none transition"
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest">Password</label>
+              <Link href="/forgot-password" size="sm" className="text-[10px] text-zinc-600 hover:text-indigo-400 font-black uppercase tracking-widest transition">
+                Lost Key?
+              </Link>
+            </div>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                placeholder="Enter your password"
-                className="w-full border-2 border-gray-200 focus:border-indigo-500 rounded-xl pl-10 pr-10 py-3 text-sm text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white outline-none transition cursor-text"
+                placeholder="PASSWORD"
+                className="w-full bg-white/5 border border-white/5 focus:border-indigo-500/50 rounded-2xl pl-12 pr-12 py-4 text-sm text-white placeholder:text-zinc-700 outline-none transition"
               />
               <button
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600 transition cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white transition cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -102,14 +128,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="flex justify-end mb-5">
-          <Link href="/forgot-password" className="text-xs text-indigo-600 hover:underline cursor-pointer font-medium">
-            Forgot password?
-          </Link>
-        </div>
-
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-3 text-sm mb-4">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl p-4 text-xs font-bold mb-6 text-center tracking-wide">
             {error}
           </div>
         )}
@@ -117,15 +137,20 @@ export default function LoginPage() {
         <button
           onClick={handleLogin}
           disabled={loading || !email || !password}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl text-sm transition cursor-pointer"
+          className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl text-xs transition-all cursor-pointer uppercase tracking-[0.2em] shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 group"
         >
-          {loading ? 'Signing in...' : 'Sign In →'}
+          {loading ? 'Validating...' : (
+            <>
+              Login
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </>
+          )}
         </button>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Don't have an account?{' '}
-          <Link href="/signup" className="text-indigo-600 font-semibold hover:underline cursor-pointer">
-            Create one free
+        <p className="text-center text-[10px] text-zinc-600 font-black uppercase tracking-widest mt-10">
+          New to the system?{' '}
+          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 transition underline underline-offset-4">
+            Create Free Account
           </Link>
         </p>
       </div>

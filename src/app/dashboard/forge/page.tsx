@@ -33,23 +33,45 @@ interface PDFContent {
 }
 
 const STEPS = [
-  { id: 1, label: 'Cover Image',  icon: <ImageIcon className="w-4 h-4" /> },
-  { id: 2, label: 'Customize',    icon: <Edit3 className="w-4 h-4" /> },
-  { id: 3, label: 'Generate',     icon: <Sparkles className="w-4 h-4" /> },
-  { id: 4, label: 'Preview',      icon: <FileText className="w-4 h-4" /> },
-  { id: 5, label: 'Export',       icon: <Download className="w-4 h-4" /> },
+  { id: 1, label: 'Cover Image', icon: <ImageIcon className="w-4 h-4" /> },
+  { id: 2, label: 'Customize',   icon: <Edit3 className="w-4 h-4" /> },
+  { id: 3, label: 'Generate',    icon: <Sparkles className="w-4 h-4" /> },
+  { id: 4, label: 'Preview',     icon: <FileText className="w-4 h-4" /> },
+  { id: 5, label: 'Export',      icon: <Download className="w-4 h-4" /> },
 ]
 
 const TONES = ['Professional', 'Conversational', 'Motivational', 'Educational', 'Authoritative']
-const GENERATE_STEPS = [
-  'Reading your customizations...',
-  'Crafting chapter structure...',
-  'Writing introduction...',
-  'Generating chapter content...',
-  'Adding tips & takeaways...',
-  'Writing conclusion...',
-  'Finalizing your guide...',
-]
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// Build dynamic generate steps based on chapter count
+function buildGenSteps(chapterCount: number): string[] {
+  return [
+    'Reading your customizations...',
+    'Writing introduction...',
+    ...Array.from({ length: chapterCount }, (_, i) => `Writing chapter ${i + 1} of ${chapterCount}...`),
+    'Writing conclusion...',
+    'Finalizing your guide...',
+  ]
+}
+
+// Build timing for each step in ms from start
+function buildStepTimings(chapterCount: number): number[] {
+  const timings = [
+    500,   // reading
+    3500,  // intro
+  ]
+  let cursor = 7500
+  for (let i = 0; i < chapterCount; i++) {
+    timings.push(cursor)
+    // chapters 3 & 4 need more time due to rate limits
+    const delay = i >= 2 && i <= 3 ? 9000 : 6000
+    cursor += delay
+  }
+  timings.push(cursor)         // conclusion
+  timings.push(cursor + 3000)  // finalizing
+  return timings
+}
 
 export default function ForgePage() {
   const router = useRouter()
@@ -68,7 +90,8 @@ export default function ForgePage() {
   const [chapterCount, setChapterCount] = useState(6)
   const [targetPrice, setTargetPrice] = useState('$9.99')
 
-  // Step 3
+  // Step 3 — dynamic
+  const [genSteps, setGenSteps] = useState<string[]>(buildGenSteps(6))
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState(0)
   const [content, setContent] = useState<PDFContent | null>(null)
@@ -80,7 +103,6 @@ export default function ForgePage() {
 
   // Step 5
   const [exporting, setExporting] = useState(false)
-  const [exported, setExported] = useState(false)
 
   useEffect(() => {
     const stored = sessionStorage.getItem('forgeIdea')
@@ -91,6 +113,11 @@ export default function ForgePage() {
     setSubtitle(parsed.angle)
     fetchPhotos(parsed.niche || parsed.title)
   }, [])
+
+  // Rebuild gen steps whenever chapterCount changes
+  useEffect(() => {
+    setGenSteps(buildGenSteps(chapterCount))
+  }, [chapterCount])
 
   const fetchPhotos = async (query: string) => {
     setPhotosLoading(true)
@@ -103,41 +130,84 @@ export default function ForgePage() {
     finally { setPhotosLoading(false) }
   }
 
-  const handleGenerate = async () => {
-    if (!idea) return
-    setGenerating(true)
-    setGenStep(0)
-    setGenError('')
-    const interval = setInterval(() => {
-      setGenStep(prev => prev < GENERATE_STEPS.length - 1 ? prev + 1 : prev)
-    }, 1500)
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idea: {
-            title: customTitle,
-            angle: subtitle,
-            targetAudience: idea.targetAudience,
-            tone,
-            chapterCount,
+const handleGenerate = async () => {
+  if (!idea) return
+  setGenerating(true)
+  setGenStep(0)
+  setGenError('')
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idea: {
+          title: customTitle,
+          angle: subtitle,
+          targetAudience: idea.targetAudience,
+          tone,
+          chapterCount,
+        }
+      }),
+    })
+
+    if (!res.ok) throw new Error('Request failed')
+    if (!res.body) throw new Error('No stream')
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const data = JSON.parse(line.slice(6))
+
+          if (data.event === 'progress') {
+            // Find matching step index
+            const idx = genSteps.findIndex(s =>
+              s.toLowerCase().includes(data.step.toLowerCase().split(' ').slice(0, 3).join(' ').toLowerCase())
+            )
+            if (idx !== -1) setGenStep(idx)
+            else setGenStep(prev => Math.min(prev + 1, genSteps.length - 2))
           }
-        }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setContent(data.content)
-      setEditedContent(data.content)
-      clearInterval(interval)
-      setStep(4)
-    } catch {
-      setGenError('Generation failed. Try again.')
-      clearInterval(interval)
-    } finally {
-      setGenerating(false)
+
+          if (data.event === 'chapter_done') {
+            // Move to exact chapter step
+            const chapterStepIdx = 2 + (data.chapter - 1) // intro is index 1, chapters start at 2
+            setGenStep(chapterStepIdx)
+          }
+
+          if (data.event === 'done') {
+            setGenStep(genSteps.length - 1)
+            await sleep(600)
+            setContent(data.content)
+            setEditedContent(data.content)
+            setStep(4)
+          }
+
+          if (data.event === 'error') {
+            throw new Error(data.message)
+          }
+        } catch (parseErr) {
+          // skip malformed lines
+        }
+      }
     }
+  } catch (err: any) {
+    setGenError(err.message || 'Generation failed. Try again.')
+  } finally {
+    setGenerating(false)
   }
+}
 
   const handleExport = async () => {
     if (!editedContent) return
@@ -160,7 +230,6 @@ export default function ForgePage() {
       a.download = `${customTitle.replace(/\s+/g, '_')}.pdf`
       a.click()
       URL.revokeObjectURL(url)
-      setExported(true)
       setStep(5)
     } catch {
       setGenError('Export failed. Try again.')
@@ -253,25 +322,18 @@ export default function ForgePage() {
                         : 'border-transparent hover:border-violet-300'
                     }`}
                   >
-                    <img
-                      src={photo.urls.small}
-                      alt={photo.alt_description}
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={photo.urls.small} alt={photo.alt_description} className="w-full h-full object-cover" />
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Search different */}
             <div className="flex gap-3 mb-6">
               <input
                 type="text"
                 placeholder="Search different images..."
                 className="flex-1 border border-slate-200 focus:border-violet-400 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-300 outline-none bg-slate-50 focus:bg-white transition"
-                onKeyDown={e => {
-                  if (e.key === 'Enter') fetchPhotos((e.target as HTMLInputElement).value)
-                }}
+                onKeyDown={e => { if (e.key === 'Enter') fetchPhotos((e.target as HTMLInputElement).value) }}
               />
               <button
                 onClick={() => {
@@ -332,7 +394,7 @@ export default function ForgePage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Writing Tone</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -352,8 +414,9 @@ export default function ForgePage() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="mb-4">
+                <div className="space-y-4">
+                  {/* Chapter count */}
+                  <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chapters</label>
                       <span className="text-xs font-bold text-violet-600 bg-violet-50 px-2.5 py-0.5 rounded-full">{chapterCount}</span>
@@ -364,8 +427,12 @@ export default function ForgePage() {
                       className="w-full accent-violet-600 cursor-pointer"
                     />
                     <div className="flex justify-between text-xs text-slate-300 mt-1"><span>4</span><span>10</span></div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      ⏱ Est. {Math.round((chapterCount * 6 + 20) / 60)} min generation time
+                    </p>
                   </div>
 
+                  {/* Target price */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Target Price</label>
                     <div className="grid grid-cols-3 gap-2">
@@ -385,8 +452,8 @@ export default function ForgePage() {
                     </div>
                   </div>
 
-                  {/* Preview card */}
-                  <div className="mt-4 rounded-xl overflow-hidden border border-slate-200">
+                  {/* Mini preview */}
+                  <div className="rounded-xl overflow-hidden border border-slate-200">
                     {selectedPhoto && (
                       <img src={selectedPhoto.urls.small} className="w-full h-24 object-cover" />
                     )}
@@ -413,9 +480,9 @@ export default function ForgePage() {
               <button
                 onClick={() => { setStep(3); setTimeout(handleGenerate, 300) }}
                 disabled={!customTitle}
-                className="flex-2 flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer"
+                className="flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer"
               >
-                <Sparkles className="w-4 h-4" /> Generate Content
+                <Sparkles className="w-4 h-4" /> Generate {chapterCount} Chapters
               </button>
             </div>
           </div>
@@ -423,38 +490,91 @@ export default function ForgePage() {
 
         {/* ── STEP 3: Generating ── */}
         {step === 3 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center">
             <div className="w-20 h-20 bg-violet-50 rounded-full flex items-center justify-center mx-auto mb-6">
               <Zap className="w-10 h-10 text-violet-600 animate-pulse" />
             </div>
             <h2 className="text-xl font-bold text-slate-900 mb-2">Forging Your Product</h2>
-            <p className="text-slate-400 text-sm mb-8">AI is crafting your complete digital guide...</p>
+            <p className="text-slate-400 text-sm mb-2">
+              AI is writing your complete {chapterCount}-chapter guide
+            </p>
+            <p className="text-xs text-slate-300 mb-8">
+              Est. {Math.round((chapterCount * 6 + 20) / 60)} min — please don't close this tab
+            </p>
 
-            <div className="max-w-sm mx-auto space-y-3 mb-8">
-              {GENERATE_STEPS.map((s, i) => (
+            {/* Scrollable step list */}
+            <div className="max-w-sm mx-auto space-y-2 mb-8 max-h-80 overflow-y-auto pr-1">
+              {genSteps.map((s, i) => (
                 <div
                   key={i}
-                  className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
-                    i < genStep ? 'bg-violet-50' : i === genStep ? 'bg-violet-100' : 'opacity-30'
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-500 text-left ${
+                    i < genStep
+                      ? 'bg-violet-50 opacity-70'
+                      : i === genStep
+                      ? 'bg-violet-100 shadow-sm'
+                      : 'opacity-20'
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                    i < genStep ? 'bg-violet-600' : i === genStep ? 'bg-violet-400' : 'bg-slate-200'
+                    i < genStep
+                      ? 'bg-violet-600'
+                      : i === genStep
+                      ? 'bg-violet-400'
+                      : 'bg-slate-200'
                   }`}>
                     {i < genStep
                       ? <Check className="w-3 h-3 text-white" />
                       : i === genStep
-                      ? <span className="w-2 h-2 bg-white rounded-full animate-ping" />
+                      ? <span className="w-2 h-2 bg-white rounded-full animate-ping block" />
                       : null
                     }
                   </div>
-                  <span className={`text-sm ${i <= genStep ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>{s}</span>
+                  <span className={`text-sm ${
+                    i < genStep
+                      ? 'text-slate-500'
+                      : i === genStep
+                      ? 'text-slate-800 font-semibold'
+                      : 'text-slate-400'
+                  }`}>{s}</span>
+                  {i === genStep && (
+                    <div className="flex gap-1 ml-auto shrink-0">
+                      {[0,1,2].map(d => (
+                        <span
+                          key={d}
+                          className="w-1 h-1 bg-violet-400 rounded-full animate-bounce"
+                          style={{ animationDelay: `${d * 0.15}s` }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
 
+            {/* Progress bar */}
+            <div className="max-w-sm mx-auto">
+              <div className="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Progress</span>
+                <span>{Math.round((genStep / genSteps.length) * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-1000"
+                  style={{ width: `${(genStep / genSteps.length) * 100}%` }}
+                />
+              </div>
+            </div>
+
             {genError && (
-              <div className="bg-red-50 border border-red-100 text-red-500 rounded-xl p-4 text-sm mb-4">{genError}</div>
+              <div className="bg-red-50 border border-red-100 text-red-500 rounded-xl p-4 text-sm mt-6">
+                {genError}
+                <button
+                  onClick={() => { setStep(2); setGenError('') }}
+                  className="ml-3 underline cursor-pointer"
+                >
+                  Go back
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -465,27 +585,24 @@ export default function ForgePage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-base font-bold text-slate-900">Preview & Edit</h2>
-                <p className="text-slate-400 text-xs mt-0.5">Click any section to edit it before exporting</p>
+                <p className="text-slate-400 text-xs mt-0.5">Click any section to edit before exporting</p>
               </div>
               <button
                 onClick={handleExport}
                 disabled={exporting}
                 className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-xl flex items-center gap-2 transition cursor-pointer shadow-sm"
               >
-                {exporting ? (
-                  <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Exporting...</>
-                ) : (
-                  <><Download className="w-4 h-4" /> Export PDF</>
-                )}
+                {exporting
+                  ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Exporting...</>
+                  : <><Download className="w-4 h-4" /> Export PDF</>
+                }
               </button>
             </div>
 
             <div className="space-y-4">
-              {/* Title card */}
+              {/* Cover */}
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                {selectedPhoto && (
-                  <img src={selectedPhoto.urls.regular} className="w-full h-48 object-cover" />
-                )}
+                {selectedPhoto && <img src={selectedPhoto.urls.regular} className="w-full h-48 object-cover" />}
                 <div className="p-6">
                   <input
                     value={editedContent.title}
@@ -515,7 +632,9 @@ export default function ForgePage() {
               {editedContent.chapters.map((ch, idx) => (
                 <div key={idx} className="bg-white rounded-2xl border border-slate-200 p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold text-violet-500 uppercase tracking-wider">Chapter {idx + 1}</span>
+                    <span className="text-xs font-semibold text-violet-500 uppercase tracking-wider">
+                      Chapter {idx + 1} of {editedContent.chapters.length}
+                    </span>
                     <button
                       onClick={() => setEditingChapter(editingChapter === idx ? null : idx)}
                       className="text-xs text-slate-400 hover:text-violet-600 transition cursor-pointer flex items-center gap-1"
@@ -529,16 +648,15 @@ export default function ForgePage() {
                     onChange={e => updateChapter(idx, 'title', e.target.value)}
                     className="w-full text-sm font-bold text-slate-900 bg-transparent border-b border-transparent focus:border-violet-300 outline-none mb-3 pb-1 cursor-text"
                   />
-                  {editingChapter === idx && (
+                  {editingChapter === idx ? (
                     <textarea
                       value={ch.content}
                       onChange={e => updateChapter(idx, 'content', e.target.value)}
-                      rows={6}
+                      rows={8}
                       className="w-full text-sm text-slate-700 bg-slate-50 focus:bg-white border border-transparent focus:border-violet-300 rounded-xl p-3 outline-none resize-none transition cursor-text"
                     />
-                  )}
-                  {editingChapter !== idx && (
-                    <p className="text-xs text-slate-500 line-clamp-2">{ch.content}</p>
+                  ) : (
+                    <p className="text-xs text-slate-500 line-clamp-3">{ch.content}</p>
                   )}
                   {ch.tips?.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -558,12 +676,11 @@ export default function ForgePage() {
                 <textarea
                   value={editedContent.conclusion}
                   onChange={e => setEditedContent({ ...editedContent, conclusion: e.target.value })}
-                  rows={3}
+                  rows={4}
                   className="w-full text-sm text-slate-700 bg-slate-50 focus:bg-white border border-transparent focus:border-violet-300 rounded-xl p-3 outline-none resize-none transition cursor-text"
                 />
               </div>
 
-              {/* Export button bottom */}
               <button
                 onClick={handleExport}
                 disabled={exporting}
@@ -583,25 +700,18 @@ export default function ForgePage() {
               <Check className="w-10 h-10 text-green-500" />
             </div>
             <h2 className="text-2xl font-bold text-slate-900 mb-2">Your Product is Ready! 🎉</h2>
-            <p className="text-slate-400 text-sm mb-8">
-              Your PDF has been downloaded. Time to list it and start selling.
-            </p>
+            <p className="text-slate-400 text-sm mb-8">Your PDF has been downloaded. Time to list it and start selling.</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
               {[
                 { label: 'Gumroad', emoji: '💰', url: 'https://gumroad.com' },
-                { label: 'Payhip', emoji: '🛒', url: 'https://payhip.com' },
-                { label: 'Etsy', emoji: '🏪', url: 'https://etsy.com' },
-              ].map(platform => (
-                <a
-                  key={platform.label}
-                  href={platform.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-violet-300 rounded-xl transition cursor-pointer"
-                >
-                  <span className="text-2xl">{platform.emoji}</span>
-                  <span className="text-sm font-semibold text-slate-700">Sell on {platform.label}</span>
+                { label: 'Payhip',  emoji: '🛒', url: 'https://payhip.com' },
+                { label: 'Etsy',    emoji: '🏪', url: 'https://etsy.com' },
+              ].map(p => (
+                <a key={p.label} href={p.url} target="_blank" rel="noopener noreferrer"
+                  className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-violet-300 rounded-xl transition cursor-pointer">
+                  <span className="text-2xl">{p.emoji}</span>
+                  <span className="text-sm font-semibold text-slate-700">Sell on {p.label}</span>
                 </a>
               ))}
             </div>
@@ -614,7 +724,7 @@ export default function ForgePage() {
                 Generate More Ideas
               </button>
               <button
-                onClick={() => { setStep(4); setExported(false) }}
+                onClick={() => { setStep(4) }}
                 className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-semibold px-6 py-3 rounded-xl transition cursor-pointer text-sm"
               >
                 Edit & Re-export

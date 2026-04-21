@@ -25,6 +25,7 @@ import {
   X,
   Terminal,
 } from "lucide-react";
+import Image from 'next/image'
 
 export default function LandingPage() {
   const router = useRouter();
@@ -49,9 +50,16 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 backdrop-blur-2xl border-b border-white/[0.05] bg-[#0f1117]/80">
         <div className="flex items-center justify-between px-6 py-5 max-w-7xl mx-auto">
           <div className="flex items-center gap-3 group cursor-pointer">
-            <div className="bg-indigo-600 rounded-xl p-2 shadow-lg shadow-indigo-600/40 group-hover:rotate-12 transition-transform duration-300">
-              <Zap className="w-5 h-5 text-white" fill="white" />
-            </div>
+            <div className="rounded-xl p-1.5 shadow-lg shadow-indigo-600/40 group-hover:rotate-12 transition-transform duration-300 flex items-center justify-center overflow-hidden">
+  <Image 
+    src="/digiforge_logo.png" // Next.js looks in the 'public' folder by default
+    alt="DigiForge AI Logo"
+    width={24}  // Equivalent to w-6
+    height={24} // Equivalent to h-6
+    className="object-contain"
+    priority // This ensures the logo loads instantly
+  />
+</div>
             <span className="font-black text-2xl tracking-tighter text-white">
               DigiForge<span className="text-indigo-500">AI</span>
             </span>
@@ -537,9 +545,16 @@ export default function LandingPage() {
           {/* Brand Column */}
           <div className="md:col-span-4 space-y-8">
             <div className="flex items-center gap-3 group cursor-pointer">
-              <div className="bg-indigo-600 rounded-xl p-2 shadow-lg shadow-indigo-600/40 group-hover:rotate-12 transition-transform duration-300">
-                <Zap className="w-6 h-6 text-white" fill="white" />
-              </div>
+                          <div className="rounded-xl p-1.5 shadow-lg shadow-indigo-600/40 group-hover:rotate-12 transition-transform duration-300 flex items-center justify-center overflow-hidden">
+  <Image 
+    src="/digiforge_logo.png" // Next.js looks in the 'public' folder by default
+    alt="DigiForge AI Logo"
+    width={24}  // Equivalent to w-6
+    height={24} // Equivalent to h-6
+    className="object-contain"
+    priority // This ensures the logo loads instantly
+  />
+</div>
               <span className="font-black text-2xl tracking-tighter text-white uppercase">
                 DigiForge<span className="text-indigo-500">AI</span>
               </span>
