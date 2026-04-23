@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -49,6 +49,8 @@ useEffect(() => {
   }
 }, []);
 
+const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
     <main className="min-h-screen bg-[#0f1117] text-zinc-200 selection:bg-indigo-500/30 font-sans cursor-default">
       {/* Background Lighting & Textures */}
@@ -65,56 +67,109 @@ useEffect(() => {
         </p>
       </div>
 
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 backdrop-blur-2xl border-b border-white/[0.05] bg-[#0f1117]/80">
-        <div className="flex items-center justify-between px-6 py-5 max-w-7xl mx-auto">
-          <Link href="/" className="flex items-center gap-3 group cursor-pointer">
-            <div className="rounded-xl p-1.5 shadow-lg shadow-indigo-600/40 group-hover:rotate-12 transition-transform duration-300 flex items-center justify-center overflow-hidden">
-              <Image
-                src="/digiforge_logo.png"
-                alt="DigiForge AI Logo"
-                width={24}
-                height={24}
-                className="object-contain"
-                priority
-              />
-            </div>
-            <span className="font-black text-2xl tracking-tighter text-white">
-              DigiForge<span className="text-indigo-500">AI</span>
-            </span>
-          </Link>
+{/* Navbar - Fully Responsive with Mobile Menu */}
+<nav className="sticky top-0 z-50 backdrop-blur-2xl border-b border-white/[0.05] bg-[#0f1117]/80">
+  <div className="flex items-center justify-between px-4 md:px-6 py-4 md:py-5 max-w-7xl mx-auto">
+    {/* Logo - Always visible */}
+    <Link href="/" className="flex items-center gap-2 md:gap-3 group cursor-pointer shrink-0">
+      <div className="rounded-xl p-1.5 shadow-lg shadow-indigo-600/40 group-hover:rotate-12 transition-transform duration-300 flex items-center justify-center overflow-hidden">
+        <Image
+          src="/digiforge_logo.png"
+          alt="DigiForge AI Logo"
+          width={20}
+          height={20}
+          className="object-contain md:w-6 md:h-6"
+          priority
+        />
+      </div>
+      <span className="font-black text-lg md:text-2xl tracking-tighter text-white">
+        DigiForge<span className="text-indigo-500">AI</span>
+      </span>
+    </Link>
 
-          <div className="hidden lg:flex items-center gap-10 text-xs font-bold uppercase tracking-widest text-zinc-500">
-            <Link href="#features" className="hover:text-indigo-400 transition cursor-pointer">
-              Features
-            </Link>
-            <Link href="#how-it-works" className="hover:text-indigo-400 transition cursor-pointer">
-              Workflow
-            </Link>
-            <Link href="#reviews" className="hover:text-indigo-400 transition cursor-pointer">
-              Testimonials
-            </Link>
-            <Link href="/pricing" className="hover:text-indigo-400 transition cursor-pointer">
-              Pricing
-            </Link>
-          </div>
+    {/* Desktop Navigation - Hidden on mobile */}
+    <div className="hidden lg:flex items-center gap-6 xl:gap-10 text-xs font-bold uppercase tracking-widest text-zinc-500">
+      <Link href="#features" className="hover:text-indigo-400 transition cursor-pointer">
+        Features
+      </Link>
+      <Link href="#how-it-works" className="hover:text-indigo-400 transition cursor-pointer">
+        Workflow
+      </Link>
+      <Link href="#reviews" className="hover:text-indigo-400 transition cursor-pointer">
+        Testimonials
+      </Link>
+      <Link href="/pricing" className="hover:text-indigo-400 transition cursor-pointer">
+        Pricing
+      </Link>
+    </div>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push("/login")}
-              className="hidden sm:block text-xs font-bold text-zinc-400 hover:text-white transition cursor-pointer uppercase tracking-widest"
-            >
-              Login
-            </button>
-            <button
-              onClick={() => router.push("/signup")}
-              className="bg-white text-black text-xs font-black px-6 py-3 rounded-full hover:bg-indigo-50 transition-all active:scale-95 shadow-xl cursor-pointer tracking-widest uppercase"
-            >
-              Sign Up Free
-            </button>
-          </div>
+    {/* Desktop Auth Buttons - Hidden on mobile */}
+    <div className="hidden md:flex items-center gap-4">
+      <button
+        onClick={() => router.push("/login")}
+        className="text-xs font-bold text-zinc-400 hover:text-white transition cursor-pointer uppercase tracking-widest"
+      >
+        Login
+      </button>
+      <button
+        onClick={() => router.push("/signup")}
+        className="bg-white text-black text-xs font-black px-5 py-2.5 rounded-full hover:bg-indigo-50 transition-all active:scale-95 shadow-xl cursor-pointer tracking-widest uppercase"
+      >
+        Sign Up Free
+      </button>
+    </div>
+
+    {/* Mobile Menu Button */}
+    <button
+      onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+      className="lg:hidden flex flex-col gap-1.5 p-2"
+    >
+      <span className={`w-6 h-0.5 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+      <span className={`w-6 h-0.5 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : ''}`} />
+      <span className={`w-6 h-0.5 bg-white transition-all duration-300 ${isMobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+    </button>
+  </div>
+
+  {/* Mobile Menu Dropdown */}
+  {isMobileMenuOpen && (
+    <div className="lg:hidden bg-[#0f1117]/95 backdrop-blur-2xl border-t border-white/[0.05] px-4 py-4">
+      <div className="flex flex-col gap-4">
+        <Link href="#features" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-bold text-zinc-400 hover:text-white transition py-2">
+          Features
+        </Link>
+        <Link href="#how-it-works" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-bold text-zinc-400 hover:text-white transition py-2">
+          Workflow
+        </Link>
+        <Link href="#reviews" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-bold text-zinc-400 hover:text-white transition py-2">
+          Testimonials
+        </Link>
+        <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="text-sm font-bold text-zinc-400 hover:text-white transition py-2">
+          Pricing
+        </Link>
+        <div className="pt-4 flex flex-col gap-3">
+          <button
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              router.push("/login");
+            }}
+            className="text-sm font-bold text-zinc-400 hover:text-white transition py-2"
+          >
+            Login
+          </button>
+          <button
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              router.push("/signup");
+            }}
+            className="bg-white text-black text-sm font-black px-6 py-3 rounded-full hover:bg-indigo-50 transition text-center"
+          >
+            Sign Up Free
+          </button>
         </div>
-      </nav>
+      </div>
+    </div>
+  )}
+</nav>
 
       {/* Hero Section */}
       <section className="relative max-w-7xl mx-auto px-6 pt-24 pb-20 text-center">
