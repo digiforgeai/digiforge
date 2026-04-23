@@ -1,10 +1,63 @@
+// app/dashboard/page.tsx
 import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/Sidebar'
 import {
   Lightbulb, FileText, TrendingUp, ArrowRight,
-  Zap, Sparkles, BookMarked, ChevronRight, Clock3
+  Zap, Sparkles, BookMarked, ChevronRight, Clock3,
+  Crown, AlertCircle
 } from 'lucide-react'
 import Link from 'next/link'
+
+// Helper to get user's plan and usage
+async function getUserPlanAndUsage(userId: string) {
+  const supabase = await createClient()
+  
+  // Get user's plan
+  const { data: planData } = await supabase
+    .from('user_plans')
+    .select('plan_id, status')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .single()
+  
+  const planId = planData?.plan_id || 'free'
+  
+  // Get plan limits
+  const planLimits = {
+    free: { limit: 2, name: 'Free', color: 'bg-slate-100 text-slate-700', border: 'border-slate-200' },
+    starter: { limit: 10, name: 'Starter', color: 'bg-indigo-100 text-indigo-700', border: 'border-indigo-200' },
+    pro: { limit: 30, name: 'Pro', color: 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white', border: 'border-indigo-300' },
+  }
+  
+  const currentPlan = planLimits[planId as keyof typeof planLimits] || planLimits.free
+  
+  // Get usage for current month
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+  
+  const { count } = await supabase
+    .from('generated_ebooks')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', startOfMonth.toISOString())
+  
+  const used = count || 0
+  const remaining = Math.max(0, currentPlan.limit - used)
+  const percentUsed = (used / currentPlan.limit) * 100
+  
+  return {
+    planId,
+    planName: currentPlan.name,
+    planColor: currentPlan.color,
+    planBorder: currentPlan.border,
+    limit: currentPlan.limit,
+    used,
+    remaining,
+    percentUsed,
+    isFree: planId === 'free',
+  }
+}
 
 export default async function DashboardHome() {
   const supabase = await createClient()
@@ -13,15 +66,17 @@ export default async function DashboardHome() {
   if (!user) return null
 
   // ── Fetch Real Data in Parallel ──
-  const [profileRes, savedIdeasRes, ebooksRes] = await Promise.all([
+  const [profileRes, savedIdeasRes, ebooksRes, planData] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('saved_ideas').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-    supabase.from('generated_ebooks').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
+    supabase.from('generated_ebooks').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    getUserPlanAndUsage(user.id)
   ])
 
   const profile = profileRes.data
   const savedCount = savedIdeasRes.count || 0
   const ebooksCount = ebooksRes.count || 0
+  const { planName, planColor, limit, used, remaining, percentUsed, isFree } = planData
 
   const firstName = profile?.full_name?.split(' ')[0] || 'Creator'
   const hour = new Date().getHours()
@@ -46,8 +101,8 @@ export default async function DashboardHome() {
       accent: 'border-purple-100',
     },
     {
-      label: 'Forge Score Avg',
-      value: ebooksCount > 0 ? '92%' : '0%', // You can calculate actual average later
+      label: 'Monthly Limit',
+      value: `${used}/${limit}`,
       icon: TrendingUp,
       iconColor: 'text-emerald-600',
       iconBg: 'bg-emerald-50',
@@ -68,19 +123,65 @@ export default async function DashboardHome() {
           </div>
           <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Engine Online</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Online</span>
           </div>
         </div>
 
-        {/* ── Greeting Header ── */}
-        <div className="mb-8">
-          <p className="text-xs font-bold text-indigo-500 uppercase tracking-[0.2em] mb-1">{greeting}</p>
-          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-            {firstName}, let's forge something great ⚡
-          </h1>
-          <p className="text-slate-400 text-sm mt-1.5 font-medium">
-            Manage your {ebooksCount} digital products and {savedCount} saved ideas.
-          </p>
+        {/* ── Greeting Header with Plan Badge ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <p className="text-xs font-bold text-indigo-500 uppercase tracking-[0.2em] mb-1">{greeting}</p>
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+              {firstName}, let's forge something great ⚡
+            </h1>
+            <p className="text-slate-400 text-sm mt-1.5 font-medium">
+              You've forged {ebooksCount} ebooks and saved {savedCount} ideas.
+            </p>
+          </div>
+          
+          {/* Plan Badge */}
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${planColor} shadow-sm`}>
+            <Crown className="w-4 h-4" />
+            <span className="text-xs font-black uppercase tracking-wider">{planName} Plan</span>
+          </div>
+        </div>
+
+        {/* ── Usage Meter Card ── */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-7 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Monthly Usage</p>
+              <p className="text-2xl font-black text-slate-900 mt-1">
+                {used} / {limit} <span className="text-sm font-normal text-slate-400">ebooks used</span>
+              </p>
+            </div>
+            {remaining === 0 && isFree && (
+              <Link href="/pricing" className="text-xs font-black text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                ⚠️ Limit reached
+              </Link>
+            )}
+            {remaining > 0 && remaining <= 2 && isFree && (
+              <span className="text-xs font-black text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                {remaining} generation{remaining !== 1 ? 's' : ''} left
+              </span>
+            )}
+          </div>
+          <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all ${
+                percentUsed > 80 ? 'bg-amber-500' : 'bg-indigo-600'
+              }`}
+              style={{ width: `${percentUsed}%` }}
+            />
+          </div>
+          {isFree && (
+            <Link 
+              href="/pricing"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition"
+            >
+              Upgrade to Starter for 10 ebooks/month <ArrowRight className="w-3 h-3" />
+            </Link>
+          )}
         </div>
 
         {/* ── Real Stats ── */}

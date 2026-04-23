@@ -298,14 +298,21 @@ const handleForge = (idea: Idea) => {
     return;
   }
   
-  // Add timestamp to track when idea was created
-  sessionStorage.setItem('forgeIdea', JSON.stringify({ 
+  // Store the idea data
+  const ideaData = { 
     ...idea, 
     niche,
-    timestamp: Date.now()  // ← Add this
-  }));
+    timestamp: Date.now()
+  };
   
-  router.push('/dashboard/forge');
+  console.log("Storing forge idea:", ideaData); // Debug log
+  
+  sessionStorage.setItem('forgeIdea', JSON.stringify(ideaData));
+  
+  // Small delay to ensure storage is written before navigation
+  setTimeout(() => {
+    router.push('/dashboard/forge');
+  }, 100);
 }
 
   return (

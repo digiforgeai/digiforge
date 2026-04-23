@@ -18,10 +18,15 @@ import {
   DollarSign,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { MonetizationPanel } from '@/components/MonetizationPanel'
-import { saveDraft, loadDraft, clearDraft, saveToSupabase } from '@/lib/draft-storage'
-import { toast } from 'sonner'
-import { useSubscription } from '@/lib/hooks/useSubscription'
+import { MonetizationPanel } from "@/components/MonetizationPanel";
+import {
+  saveDraft,
+  loadDraft,
+  clearDraft,
+  saveToSupabase,
+} from "@/lib/draft-storage";
+import { toast } from "sonner";
+import { useSubscription } from "@/lib/hooks/useSubscription";
 import { ForgeError } from "@/components/ForgeError";
 
 interface Idea {
@@ -162,12 +167,16 @@ function buildGenSteps(n: number): string[] {
 export default function ForgePage() {
   const router = useRouter();
   const supabase = createClient();
-  
+
   // ========== ALL STATE ==========
   const [idea, setIdea] = useState<Idea | null>(null);
   const [step, setStep] = useState(1);
-  const [bookLength, setBookLength] = useState<"short" | "medium" | "long">("medium");
-  const [pdfTemplate, setPdfTemplate] = useState<"premium" | "classic">("premium");
+  const [bookLength, setBookLength] = useState<"short" | "medium" | "long">(
+    "medium",
+  );
+  const [pdfTemplate, setPdfTemplate] = useState<"premium" | "classic">(
+    "premium",
+  );
   const [exportProgress, setExportProgress] = useState(0);
   const [theme, setTheme] = useState("indigo");
   const [template, setTemplate] = useState("modern");
@@ -191,10 +200,15 @@ export default function ForgePage() {
   const [exportError, setExportError] = useState("");
   const [showMonetization, setShowMonetization] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const { plan, usage, loading: subscriptionLoading } = useSubscription();
   const [forgeError, setForgeError] = useState<string | null>(null);
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
   const [draftData, setDraftData] = useState<any>(null);
+  const {
+    plan,
+    usage,
+    loading: subscriptionLoading,
+    refresh: refreshUsage,
+  } = useSubscription();
 
   const activeTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
 
@@ -206,9 +220,12 @@ export default function ForgePage() {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(`/api/unsplash?query=${encodeURIComponent(query)}`, {
-        signal: controller.signal,
-      });
+      const res = await fetch(
+        `/api/unsplash?query=${encodeURIComponent(query)}`,
+        {
+          signal: controller.signal,
+        },
+      );
       clearTimeout(timeoutId);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -225,99 +242,96 @@ export default function ForgePage() {
 
   // ========== SIMPLE INITIALIZATION - RUNS ONCE ==========
   useEffect(() => {
+    console.log("=== FORGE PAGE INITIALIZATION ===");
+
     // Check for library restore first
-    const restoredEbook = sessionStorage.getItem('forge_restore_ebook');
-    
+    const restoredEbook = sessionStorage.getItem("forge_restore_ebook");
+    console.log("forge_restore_ebook:", restoredEbook);
+
     if (restoredEbook) {
       try {
         const ebook = JSON.parse(restoredEbook);
+        console.log("Restoring from library:", ebook.title);
+
+        // Set flag that this is from library (not a new generation)
+        sessionStorage.setItem("isFromLibrary", "true");
+
+        // Restore all the data
         setCustomTitle(ebook.title);
-        setSubtitle(ebook.subtitle || '');
+        setSubtitle(ebook.subtitle || "");
         setEditedContent(ebook.content);
         setContent(ebook.content);
-        setTheme(ebook.theme || 'indigo');
-        setPdfTemplate(ebook.template || 'premium');
+        setTheme(ebook.theme || "indigo");
+        setPdfTemplate(ebook.template || "premium");
         setChapterCount(ebook.chapterCount || 6);
+
         if (ebook.coverImageUrl) {
-          setSelectedPhoto({ urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl } });
+          setSelectedPhoto({
+            urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl },
+          });
         }
+
         setIdea({
           title: ebook.title,
-          angle: ebook.subtitle || '',
-          targetAudience: ebook.niche || 'Readers',
+          angle: ebook.subtitle || "",
+          targetAudience: ebook.niche || "Readers",
           forgeScore: 85,
-          trend: 'Hot',
-          niche: ebook.niche || 'General'
+          trend: "Hot",
+          niche: ebook.niche || "General",
         });
+
+        // Jump to step 5 (preview & edit)
         setStep(5);
-        sessionStorage.removeItem('forge_restore_ebook');
+
+        // Clear the session storage
+        sessionStorage.removeItem("forge_restore_ebook");
+
         toast.success(`Loaded "${ebook.title}" successfully`);
         return;
       } catch (err) {
-        console.error('Failed to restore ebook:', err);
-        sessionStorage.removeItem('forge_restore_ebook');
+        console.error("Failed to restore ebook:", err);
+        sessionStorage.removeItem("forge_restore_ebook");
+        sessionStorage.removeItem("isFromLibrary");
       }
     }
-    
-    // Check for regular forge idea
+
+    // Check for regular forge idea (from generate page)
     const stored = sessionStorage.getItem("forgeIdea");
-    
-    if (!stored) {
-      setForgeError("No product selected. Please generate or select an idea first.");
-      return;
-    }
-    
-    try {
-      const parsed = JSON.parse(stored);
-      
-      if (!parsed.title || !parsed.niche) {
-        sessionStorage.removeItem("forgeIdea");
-        setForgeError("Invalid product data. Please generate a new idea.");
-        return;
-      }
-      
-      // Check if idea is expired (older than 24 hours)
-      const ideaTimestamp = parsed.timestamp;
-      if (ideaTimestamp) {
-        const hoursOld = (Date.now() - ideaTimestamp) / (1000 * 60 * 60);
-        if (hoursOld > 24) {
-          sessionStorage.removeItem("forgeIdea");
-          setForgeError("This idea has expired. Please generate a fresh idea.");
-          return;
+    console.log("forgeIdea:", stored);
+
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        console.log("Found forge idea:", parsed.title);
+
+        // Clear any library flag
+        sessionStorage.removeItem("isFromLibrary");
+
+        if (parsed.title) {
+          setIdea(parsed);
+          setCustomTitle(parsed.title);
+          setSubtitle(parsed.angle || "");
+          if (parsed.theme) setTheme(parsed.theme);
+          if (parsed.niche) fetchPhotos(parsed.niche);
+          return; // Success - exit
         }
+      } catch (err) {
+        console.error("Failed to parse forge idea:", err);
       }
-      
-      // Restore content if exists
-      if (parsed.content) {
-        setEditedContent(parsed.content);
-        setContent(parsed.content);
-        setStep(5);
-        if (parsed.theme) setTheme(parsed.theme);
-        if (parsed.template) setPdfTemplate(parsed.template);
-        if (parsed.chapterCount) setChapterCount(parsed.chapterCount);
-        if (parsed.coverImageUrl) {
-          setSelectedPhoto({ urls: { regular: parsed.coverImageUrl, small: parsed.coverImageUrl } });
-        }
-      }
-      
-      setIdea(parsed);
-      setCustomTitle(parsed.title);
-      setSubtitle(parsed.angle || "");
-      if (parsed.theme) setTheme(parsed.theme);
-      fetchPhotos(parsed.niche || parsed.title);
-      
-    } catch (err) {
-      console.error("Failed to parse forge idea:", err);
-      sessionStorage.removeItem("forgeIdea");
-      setForgeError("Invalid product data. Please generate a new idea.");
     }
-  }, []); // Empty dependency array - runs once on mount
+
+    // If we get here, no valid data found
+    console.log("No valid data found, showing error");
+    setForgeError(
+      "No product selected. Please generate or select an idea first.",
+    );
+  }, []);
 
   // ========== AUTO-SAVE DRAFT ==========
   useEffect(() => {
     if (generating) return;
     if (!customTitle && step === 1) return;
-    
+
     const draft = {
       title: customTitle,
       subtitle: subtitle,
@@ -331,17 +345,35 @@ export default function ForgePage() {
       bookLength: bookLength,
     };
     saveDraft(draft);
-  }, [customTitle, subtitle, editedContent, content, theme, pdfTemplate, selectedPhoto, step, chapterCount, tone, bookLength, generating]);
+  }, [
+    customTitle,
+    subtitle,
+    editedContent,
+    content,
+    theme,
+    pdfTemplate,
+    selectedPhoto,
+    step,
+    chapterCount,
+    tone,
+    bookLength,
+    generating,
+  ]);
 
   // ========== DRAFT CHECK ==========
   useEffect(() => {
     if (editedContent || content) return;
-    
+
     const draft = loadDraft();
-    if (draft && draft.content && step === 1 && !sessionStorage.getItem("forgeIdea")) {
-      const currentUserId = localStorage.getItem('sb-user-id');
+    if (
+      draft &&
+      draft.content &&
+      step === 1 &&
+      !sessionStorage.getItem("forgeIdea")
+    ) {
+      const currentUserId = localStorage.getItem("sb-user-id");
       const draftUserId = draft.userId;
-      
+
       if (currentUserId && draftUserId && currentUserId !== draftUserId) {
         clearDraft();
         return;
@@ -358,8 +390,10 @@ export default function ForgePage() {
 
   // ========== CLEAR DRAFT ON LOGOUT ==========
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
-      if (event === 'SIGNED_OUT') {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event: string) => {
+      if (event === "SIGNED_OUT") {
         clearDraft();
         setShowDraftPrompt(false);
         setDraftData(null);
@@ -371,14 +405,14 @@ export default function ForgePage() {
   }, [supabase]);
 
   // ========== CLEAR FORGE DATA ON UNMOUNT ==========
-  useEffect(() => {
-    return () => {
-      const isFromLibrary = sessionStorage.getItem('forge_restore_ebook');
-      if (!isFromLibrary) {
-        sessionStorage.removeItem('forgeIdea');
-      }
-    };
-  }, []);
+  //   useEffect(() => {
+  //     return () => {
+  //       const isFromLibrary = sessionStorage.getItem('forge_restore_ebook');
+  //       if (!isFromLibrary) {
+  //         sessionStorage.removeItem('forgeIdea');
+  //       }
+  //     };
+  //   }, []);
 
   // ========== FUNCTIONS ==========
   const handleGenerate = async (regenerate = false) => {
@@ -421,18 +455,65 @@ export default function ForgePage() {
             const data = JSON.parse(line.slice(6));
             if (data.event === "progress") {
               const idx = genSteps.findIndex((s) =>
-                s.toLowerCase().includes(data.step?.toLowerCase()?.split(" ").slice(0, 3).join(" ") || "")
+                s
+                  .toLowerCase()
+                  .includes(
+                    data.step
+                      ?.toLowerCase()
+                      ?.split(" ")
+                      .slice(0, 3)
+                      .join(" ") || "",
+                  ),
               );
               if (idx !== -1) setGenStep(idx);
-              else setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
+              else
+                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
             }
-            if (data.event === "chapter_done") setGenStep(2 + (data.chapter - 1));
+            if (data.event === "chapter_done")
+              setGenStep(2 + (data.chapter - 1));
             if (data.event === "done") {
               setGenStep(genSteps.length - 1);
               await sleep(600);
               setContent(data.content);
               setEditedContent(data.content);
               setStep(5);
+
+              await refreshUsage();
+
+              // ========== SAVE TO DATABASE ONLY ON FIRST GENERATION ==========
+              // Check if this is a new generation (not a restore from library)
+              const isFromLibrary =
+                sessionStorage.getItem("isFromLibrary") === "true";
+              const isNewGeneration =
+                !isFromLibrary &&
+                !sessionStorage.getItem("forge_restore_ebook");
+
+              if (isNewGeneration) {
+                try {
+                  const {
+                    data: { user },
+                  } = await supabase.auth.getUser();
+                  if (user && data.content) {
+                    await saveToSupabase({
+                      title: data.content.title || customTitle,
+                      subtitle: data.content.subtitle || subtitle,
+                      niche: idea?.niche || "",
+                      theme: theme,
+                      template: pdfTemplate || "premium",
+                      chapterCount: data.content.chapters?.length || 0,
+                      coverImageUrl: selectedPhoto?.urls?.regular || null,
+                      content: data.content,
+                    });
+                    console.log("New ebook saved to library");
+                    clearDraft();
+                  }
+                } catch (err) {
+                  console.error("Could not save to library:", err);
+                }
+              }
+
+              // Clear the library flag
+              sessionStorage.removeItem("isFromLibrary");
             }
             if (data.event === "error") throw new Error(data.message);
           } catch {}
@@ -476,13 +557,17 @@ export default function ForgePage() {
       console.log("Response status:", response.status);
       if (response.status === 403) {
         const errorData = await response.json();
-        if (errorData.error === 'plan_restricted') {
+        if (errorData.error === "plan_restricted") {
           setShowUpgradeModal(true);
-          setExportError(errorData.message || "This feature requires an upgrade");
+          setExportError(
+            errorData.message || "This feature requires an upgrade",
+          );
           setExporting(false);
           return;
         }
-        throw new Error(errorData.message || `Export failed: ${response.status}`);
+        throw new Error(
+          errorData.message || `Export failed: ${response.status}`,
+        );
       }
       if (!response.ok) {
         const errorText = await response.text();
@@ -503,25 +588,6 @@ export default function ForgePage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       console.log("PDF download triggered successfully");
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user && editedContent) {
-          await saveToSupabase({
-            title: editedContent.title || customTitle,
-            subtitle: editedContent.subtitle || subtitle,
-            niche: idea?.niche || '',
-            theme: theme,
-            template: pdfTemplate || 'premium',
-            chapterCount: editedContent.chapters?.length || 0,
-            coverImageUrl: selectedPhoto?.urls?.regular || null,
-            content: editedContent
-          });
-          console.log('Ebook saved to your library');
-          clearDraft();
-        }
-      } catch (err) {
-        console.error('Could not save to library:', err);
-      }
       setStep(6);
     } catch (err: any) {
       console.error("Export error details:", err);
@@ -586,7 +652,7 @@ export default function ForgePage() {
       </div>
     );
   }
-  
+
   // ========== MAIN RETURN ==========
   return (
     <div className="flex w-full min-h-screen bg-[#f5f6fa]">
@@ -608,43 +674,55 @@ export default function ForgePage() {
               {customTitle}
             </p>
           </div>
-          
         </div>
 
         {/* Draft Restore Prompt */}
-{showDraftPrompt && draftData && (
-  <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-        <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </div>
-      <div>
-        <p className="text-sm font-bold text-amber-800">Unsaved Draft Found</p>
-        <p className="text-xs text-amber-600">We found an unfinished ebook from your last session</p>
-      </div>
-    </div>
-    <div className="flex gap-2">
-      <button
-        onClick={restoreDraft}
-        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg transition"
-      >
-        Restore Draft
-      </button>
-      <button
-        onClick={() => {
-          clearDraft()
-          setShowDraftPrompt(false)
-        }}
-        className="px-4 py-2 border border-amber-300 text-amber-700 text-sm font-bold rounded-lg transition"
-      >
-        Discard
-      </button>
-    </div>
-  </div>
-)}
-
+        {showDraftPrompt && draftData && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                <svg
+                  className="w-5 h-5 text-amber-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-800">
+                  Unsaved Draft Found
+                </p>
+                <p className="text-xs text-amber-600">
+                  We found an unfinished ebook from your last session
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={restoreDraft}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg transition"
+              >
+                Restore Draft
+              </button>
+              <button
+                onClick={() => {
+                  clearDraft();
+                  setShowDraftPrompt(false);
+                }}
+                className="px-4 py-2 border border-amber-300 text-amber-700 text-sm font-bold rounded-lg transition"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Steps */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-8">
@@ -1187,21 +1265,27 @@ export default function ForgePage() {
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button
-  onClick={() => {
-    // Check if user can generate before starting
-    if (usage.remaining <= 0 && plan === 'free') {
-      setShowUpgradeModal(true);
-      toast.warning(`You've used all ${usage.limit} free generations this month. Upgrade to continue.`);
-      return;
-    }
-    setStep(4);
-    setTimeout(() => handleGenerate(false), 300);
-  }}
-  disabled={!customTitle}
-  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
->
-  <Sparkles className="w-4 h-4" /> Generate {chapterCount} Chapters
-</button>
+                onClick={async () => {
+                  // Refresh usage data first
+                  await refreshUsage();
+
+                  // Check if user can generate before starting
+                  if (usage.remaining <= 0 && plan === "free") {
+                    setShowUpgradeModal(true);
+                    toast.warning(
+                      `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
+                    );
+                    return;
+                  }
+                  setStep(4);
+                  setTimeout(() => handleGenerate(false), 300);
+                }}
+                disabled={!customTitle}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
+              >
+                <Sparkles className="w-4 h-4" /> Generate {chapterCount}{" "}
+                Chapters
+              </button>
             </div>
           </div>
         )}
@@ -1314,22 +1398,26 @@ export default function ForgePage() {
               </div>
               <div className="flex gap-2">
                 {/* Regenerate button */}
-{/* Regenerate button - Updated with proper plan check */}
-<button
-  onClick={() => {
-    // Check if user can generate before regenerating
-    if (usage.remaining <= 0 && plan === 'free') {
-      setShowUpgradeModal(true);
-      toast.warning(`You've used all ${usage.limit} free generations this month. Upgrade to continue.`);
-      return;
-    }
-    setStep(4);
-    setTimeout(() => handleGenerate(true), 300);
-  }}
-  className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
->
-  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-</button>
+                <button
+                  onClick={async () => {
+                    // Refresh usage data first to ensure we have latest count
+                    await refreshUsage();
+
+                    // Check if user can generate before regenerating
+                    if (usage.remaining <= 0 && plan === "free") {
+                      setShowUpgradeModal(true);
+                      toast.warning(
+                        `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
+                      );
+                      return;
+                    }
+                    setStep(4);
+                    setTimeout(() => handleGenerate(true), 300);
+                  }}
+                  className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+                </button>
                 <button
                   onClick={handleExport}
                   disabled={exporting}
@@ -1340,9 +1428,7 @@ export default function ForgePage() {
                   } text-white`}
                 >
                   {exporting ? (
-                    <>
-                      Generating PDF...
-                    </>
+                    <>Generating PDF...</>
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
@@ -1507,104 +1593,115 @@ export default function ForgePage() {
         )}
 
         {/* ── STEP 6: Done ── */}
-{step === 6 && (
-  <div className="space-y-6">
-    {/* Success Card */}
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
-      <div className="w-20 h-20 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-        <Check className="w-10 h-10 text-emerald-500" />
-      </div>
-      <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
-        Your Product is Ready! 🎉
-      </h2>
-      <p className="text-slate-400 text-sm mb-8">
-        PDF downloaded. Your ebook has been saved to your library.
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
-        {[
-          { label: "Gumroad", emoji: "💰", url: "https://gumroad.com" },
-          { label: "Payhip", emoji: "🛒", url: "https://payhip.com" },
-          { label: "Etsy", emoji: "🏪", url: "https://etsy.com" },
-        ].map((p) => (
-          <a
-            key={p.label}
-            href={p.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-indigo-300 rounded-xl transition group"
-          >
-            <span className="text-2xl">{p.emoji}</span>
-            <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition">
-              Sell on {p.label}
-            </span>
-          </a>
-        ))}
-      </div>
-      <div className="flex gap-3 justify-center flex-wrap">
-        <button
-          onClick={() => router.push("/dashboard/generate")}
-          className="border border-slate-200 hover:border-indigo-300 text-slate-600 font-bold px-6 py-3 rounded-xl transition cursor-pointer text-sm"
-        >
-          Generate More Ideas
-        </button>
-        <button
-          onClick={() => setStep(5)}
-          className="flex items-center gap-2 bg-white border border-slate-200 hover:border-indigo-300 text-slate-700 font-bold px-6 py-3 rounded-xl transition cursor-pointer text-sm"
-        >
-          <Edit3 className="w-4 h-4" /> Edit & Re-export
-        </button>
-        <button
-  onClick={() => {
-    // Check if user can generate before regenerating
-    if (usage.remaining <= 0 && plan === 'free') {
-      setShowUpgradeModal(true);
-      toast.warning(`You've used all ${usage.limit} free generations this month. Upgrade to continue.`);
-      return;
-    }
-    setStep(4);
-    setTimeout(() => handleGenerate(true), 300);
-  }}
-  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-xl transition cursor-pointer text-sm shadow-md shadow-indigo-200"
->
-  <RefreshCw className="w-4 h-4" /> Regenerate
-</button>
-      </div>
-    </div>
+        {step === 6 && (
+          <div className="space-y-6">
+            {/* Success Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
+              <div className="w-20 h-20 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Check className="w-10 h-10 text-emerald-500" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
+                Your Product is Ready! 🎉
+              </h2>
+              <p className="text-slate-400 text-sm mb-8">
+                PDF downloaded. Your ebook has been saved to your library.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
+                {[
+                  { label: "Gumroad", emoji: "💰", url: "https://gumroad.com" },
+                  { label: "Payhip", emoji: "🛒", url: "https://payhip.com" },
+                  { label: "Etsy", emoji: "🏪", url: "https://etsy.com" },
+                ].map((p) => (
+                  <a
+                    key={p.label}
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center gap-2 p-4 border border-slate-200 hover:border-indigo-300 rounded-xl transition group"
+                  >
+                    <span className="text-2xl">{p.emoji}</span>
+                    <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition">
+                      Sell on {p.label}
+                    </span>
+                  </a>
+                ))}
+              </div>
+              <div className="flex gap-3 justify-center flex-wrap">
+                <button
+                  onClick={() => router.push("/dashboard/generate")}
+                  className="border border-slate-200 hover:border-indigo-300 text-slate-600 font-bold px-6 py-3 rounded-xl transition cursor-pointer text-sm"
+                >
+                  Generate More Ideas
+                </button>
+                <button
+                  onClick={() => setStep(5)}
+                  className="flex items-center gap-2 bg-white border border-slate-200 hover:border-indigo-300 text-slate-700 font-bold px-6 py-3 rounded-xl transition cursor-pointer text-sm"
+                >
+                  <Edit3 className="w-4 h-4" /> Edit & Re-export
+                </button>
+                <button
+                  onClick={async () => {
+                    // Refresh usage data first to ensure we have latest count
+                    await refreshUsage();
 
-    {/* Monetization Panel - Add this right after the success card */}
-    <div>
-      <button
-        onClick={() => setShowMonetization(!showMonetization)}
-        className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 hover:shadow-md transition"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-            <DollarSign className="w-5 h-5 text-amber-600" />
-          </div>
-          <div className="text-left">
-            <p className="font-black text-amber-800">Monetize Your Product</p>
-            <p className="text-xs text-amber-600">Generate sales pages, social content, and more</p>
-          </div>
-        </div>
-        <span className="text-amber-600 text-xl">{showMonetization ? '−' : '+'}</span>
-      </button>
+                    // Check if user can generate before regenerating
+                    if (usage.remaining <= 0 && plan === "free") {
+                      setShowUpgradeModal(true);
+                      toast.warning(
+                        `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
+                      );
+                      return;
+                    }
+                    setStep(4);
+                    setTimeout(() => handleGenerate(true), 300);
+                  }}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-xl transition cursor-pointer text-sm shadow-md shadow-indigo-200"
+                >
+                  <RefreshCw className="w-4 h-4" /> Regenerate
+                </button>
+              </div>
+            </div>
 
-      {showMonetization && editedContent && (
-  <div className="mt-4">
-    <MonetizationPanel 
-      ebookData={{
-        title: editedContent.title || customTitle,
-        subtitle: editedContent.subtitle || subtitle,
-        chapters: editedContent.chapters || [],
-        targetAudience: idea?.targetAudience
-      }}
-      userPlan={plan}
-    />
-  </div>
-)}
-    </div>
-  </div>
-)}
+            {/* Monetization Panel - Add this right after the success card */}
+            <div>
+              <button
+                onClick={() => setShowMonetization(!showMonetization)}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 hover:shadow-md transition"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-black text-amber-800">
+                      Monetize Your Product
+                    </p>
+                    <p className="text-xs text-amber-600">
+                      Generate sales pages, social content, and more
+                    </p>
+                  </div>
+                </div>
+                <span className="text-amber-600 text-xl">
+                  {showMonetization ? "−" : "+"}
+                </span>
+              </button>
+
+              {showMonetization && editedContent && (
+                <div className="mt-4">
+                  <MonetizationPanel
+                    ebookData={{
+                      title: editedContent.title || customTitle,
+                      subtitle: editedContent.subtitle || subtitle,
+                      chapters: editedContent.chapters || [],
+                      targetAudience: idea?.targetAudience,
+                    }}
+                    userPlan={plan}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

@@ -100,10 +100,20 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
     fetchUser()
   }, [])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+// In your Sidebar component
+const handleLogout = async () => {
+  const supabase = createClient()
+  
+  // Clear all storage
+  localStorage.clear()
+  sessionStorage.clear()
+  
+  // Sign out
+  await supabase.auth.signOut()
+  
+  // Redirect
+  window.location.href = '/login'
+}
 
   return (
     <div className="flex flex-col h-full bg-[#13151f]">
@@ -155,9 +165,13 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
             </div>
             <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
           </Link>
-          <button onClick={handleLogout} className="mt-2 cursor-pointer w-full flex items-center justify-center gap-2 py-2 text-[10px] font-black text-slate-600 hover:text-red-400 uppercase tracking-[0.2em] transition-colors">
-            <LogOut className="w-3 h-3" /> Logout
-          </button>
+<button
+  onClick={handleLogout}
+  className="flex items-center gap-3 w-full p-3 rounded-xl text-red-400 hover:bg-red-500/10 transition"
+>
+  <LogOut className="w-4 h-4" />
+  <span className="text-sm font-bold">Logout</span>
+</button>
         </div>
       </div>
     </div>

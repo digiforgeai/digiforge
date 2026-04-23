@@ -1,6 +1,8 @@
 // app/api/pdf/route.ts - FIXED chapter titles and removed underline
 import { NextResponse } from "next/server";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { createClient } from "@/lib/supabase/server";
+
 
 const clean = (t: string) =>
   (t || "")
@@ -114,6 +116,24 @@ export async function POST(req: Request) {
       template = "premium",
     } = await req.json();
 
+    // ========== GET USER'S PLAN FOR WATERMARK ==========
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    let userPlan = 'free'; // default to free
+    if (user) {
+      const { data: planData } = await supabase
+        .from('user_plans')
+        .select('plan_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single();
+      if (planData) userPlan = planData.plan_id;
+    }
+    
+    const isFreePlan = userPlan === 'free';
+    console.log(`📄 Generating PDF for ${user?.email || 'guest'} - Plan: ${userPlan}, Watermark: ${isFreePlan}`);
+
     console.log("📄 Premium PDF generation started for:", title);
 
     const doc = await PDFDocument.create();
@@ -137,41 +157,78 @@ export async function POST(req: Request) {
 
     let pageNumber = 0;
 
-    const addPage = () => {
-      pageNumber++;
-      const newPage = doc.addPage([PAGE_W, PAGE_H]);
-      newPage.drawRectangle({
-        x: 0,
-        y: 0,
-        width: PAGE_W,
-        height: PAGE_H,
-        color: PAPER,
-      });
-      return { page: newPage, y: PAGE_H - 70 };
-    };
+// Helper function to add watermark on any page (simple version without rotation)
+// Helper function to add watermark (ONLY for Free plan)
+const addWatermark = (page: any) => {
+  if (!isFreePlan) return; // Only free plan gets watermark
+  
+  const watermarkText = 'GENERATED WITH DIGIFORGE AI';
+  const fontSize = 24;
+  const textWidth = BOLD.widthOfTextAtSize(watermarkText, fontSize);
+  const centerX = PAGE_W / 2;
+  const centerY = PAGE_H / 2;
+  
+  // Diagonal watermark
+  page.drawText(watermarkText, {
+    x: centerX - textWidth / 2,
+    y: centerY,
+    size: fontSize,
+    font: BOLD,
+    color: rgb(0.7, 0.7, 0.7),
+    opacity: 0.12,
+  });
+};
 
-    const drawFooter = (page: any, section: string) => {
-      page.drawLine({
-        start: { x: LEFT_MARGIN, y: 42 },
-        end: { x: PAGE_W - RIGHT_MARGIN, y: 42 },
-        thickness: 0.3,
-        color: rgb(0.85, 0.85, 0.88),
-      });
-      page.drawText(section.slice(0, 35), {
-        x: LEFT_MARGIN,
-        y: 28,
-        size: 8,
-        font: REG,
-        color: GRAY_MID,
-      });
-      page.drawText(`${pageNumber}`, {
-        x: PAGE_W - RIGHT_MARGIN - 12,
-        y: 28,
-        size: 8,
-        font: REG,
-        color: GRAY_MID,
-      });
-    };
+const addPage = () => {
+  pageNumber++;
+  const newPage = doc.addPage([PAGE_W, PAGE_H]);
+  newPage.drawRectangle({
+    x: 0,
+    y: 0,
+    width: PAGE_W,
+    height: PAGE_H,
+    color: PAPER,
+  });
+  addWatermark(newPage); // Only adds for free plan
+  return { page: newPage, y: PAGE_H - 70 };
+};
+
+const drawFooter = (page: any, section: string) => {
+  // Draw separator line for all plans
+  page.drawLine({
+    start: { x: LEFT_MARGIN, y: 42 },
+    end: { x: PAGE_W - RIGHT_MARGIN, y: 42 },
+    thickness: 0.3,
+    color: rgb(0.85, 0.85, 0.88),
+  });
+  
+  if (isFreePlan) {
+    // Free plan - only page number (watermark already has branding)
+    page.drawText(`${pageNumber}`, {
+      x: PAGE_W - RIGHT_MARGIN - 12,
+      y: 28,
+      size: 8,
+      font: REG,
+      color: GRAY_MID,
+    });
+  } else {
+    // Starter & Pro plans - clean footer with section name and page number
+    page.drawText(section.slice(0, 35), {
+      x: LEFT_MARGIN,
+      y: 28,
+      size: 8,
+      font: REG,
+      color: GRAY_MID,
+    });
+    page.drawText(`${pageNumber}`, {
+      x: PAGE_W - RIGHT_MARGIN - 12,
+      y: 28,
+      size: 8,
+      font: REG,
+      color: GRAY_MID,
+    });
+  }
+};
 
     const writeParagraph = async (
       pageObj: any,
@@ -217,6 +274,7 @@ export async function POST(req: Request) {
     // ========== COVER PAGE ==========
     const coverPage = doc.addPage([PAGE_W, PAGE_H]);
     pageNumber++;
+    if (isFreePlan) addWatermark(coverPage);
 
     let coverImg = null;
     if (coverImageUrl) {
@@ -250,13 +308,16 @@ export async function POST(req: Request) {
       height: 4,
       color: ACCENT,
     });
-    coverPage.drawText("DIGIFORGE", {
-      x: LEFT_MARGIN,
-      y: PAGE_H - 35,
-      size: 9,
-      font: BOLD,
-      color: ACCENT,
-    });
+// Only show DigiForge branding on cover for Free plan
+if (isFreePlan) {
+  coverPage.drawText("DIGIFORGE", {
+    x: LEFT_MARGIN,
+    y: PAGE_H - 35,
+    size: 9,
+    font: BOLD,
+    color: ACCENT,
+  });
+}
 
     const titleClean = clean(content?.title || title);
     const titleWords = titleClean.split(" ");
@@ -765,81 +826,142 @@ export async function POST(req: Request) {
 
     drawFooter(concPage, "Conclusion");
 
-    // ========== BACK COVER ==========
-    const backPage = doc.addPage([PAGE_W, PAGE_H]);
+// ========== BACK COVER - Plan-based ==========
+const backPage = doc.addPage([PAGE_W, PAGE_H]);
 
-    backPage.drawRectangle({
-      x: 0,
-      y: 0,
-      width: PAGE_W,
-      height: PAGE_H,
-      color: DARK,
-    });
-    backPage.drawRectangle({
-      x: 0,
-      y: PAGE_H - 4,
-      width: PAGE_W,
-      height: 4,
-      color: ACCENT,
-    });
-    backPage.drawRectangle({
-      x: 0,
-      y: 0,
-      width: PAGE_W,
-      height: 4,
-      color: ACCENT,
-    });
+backPage.drawRectangle({
+  x: 0,
+  y: 0,
+  width: PAGE_W,
+  height: PAGE_H,
+  color: DARK,
+});
+backPage.drawRectangle({
+  x: 0,
+  y: PAGE_H - 4,
+  width: PAGE_W,
+  height: 4,
+  color: ACCENT,
+});
+backPage.drawRectangle({
+  x: 0,
+  y: 0,
+  width: PAGE_W,
+  height: 4,
+  color: ACCENT,
+});
 
-    const quoteLines = wrapText(
-      "The best investment you can make is in yourself. Knowledge is the currency that never devalues.",
-      ITAL,
-      13,
-      TEXT_WIDTH - 40,
-    );
-
-    let quoteY = PAGE_H / 2 + 40;
-    backPage.drawText('"', {
-      x: LEFT_MARGIN,
-      y: quoteY + 20,
-      size: 52,
-      font: BOLD,
-      color: ACCENT,
-      opacity: 0.3,
-    });
-
-    for (const line of quoteLines) {
-      backPage.drawText(line, {
-        x: LEFT_MARGIN + 25,
-        y: quoteY,
-        size: 13,
-        font: ITAL,
-        color: rgb(0.7, 0.7, 0.75),
-      });
-      quoteY -= 22;
-    }
-
-    backPage.drawRectangle({
+if (isFreePlan) {
+  // Free plan - shows DigiForge branding
+  backPage.drawText("DIGIFORGE", {
+    x: LEFT_MARGIN,
+    y: PAGE_H - 45,
+    size: 9,
+    font: BOLD,
+    color: ACCENT,
+    opacity: 0.5,
+  });
+  
+  const quoteLines = wrapText(
+    "The best investment you can make is in yourself. Knowledge is the currency that never devalues.",
+    ITAL,
+    14,
+    TEXT_WIDTH - 40,
+  );
+  
+  let quoteY = PAGE_H - 130;
+  backPage.drawText('"', {
+    x: LEFT_MARGIN,
+    y: PAGE_H - 100,
+    size: 72,
+    font: BOLD,
+    color: ACCENT,
+    opacity: 0.15,
+  });
+  
+  for (const line of quoteLines) {
+    backPage.drawText(line, {
       x: LEFT_MARGIN + 25,
-      y: quoteY - 20,
-      width: 40,
-      height: 2,
-      color: ACCENT,
+      y: quoteY,
+      size: 14,
+      font: ITAL,
+      color: rgb(0.75, 0.75, 0.82),
     });
-
-    backPage.drawText("DigiForge AI", {
+    quoteY -= 22;
+  }
+  
+  backPage.drawRectangle({
+    x: LEFT_MARGIN + 25,
+    y: quoteY - 15,
+    width: 50,
+    height: 2,
+    color: ACCENT,
+    opacity: 0.8,
+  });
+  
+  backPage.drawText("DigiForge AI", {
+    x: LEFT_MARGIN + 25,
+    y: quoteY - 45,
+    size: 11,
+    font: BOLD,
+    color: rgb(1, 1, 1),
+  });
+  
+  backPage.drawText("AI Digital Product Studio", {
+    x: LEFT_MARGIN + 25,
+    y: quoteY - 65,
+    size: 8,
+    font: REG,
+    color: GRAY_MID,
+  });
+  
+  backPage.drawText("digiforgeai.app", {
+    x: LEFT_MARGIN + 25,
+    y: quoteY - 82,
+    size: 8,
+    font: REG,
+    color: ACCENT,
+    opacity: 0.7,
+  });
+} else {
+  // Starter & Pro plans - clean back cover with just quote (no branding)
+  const quoteLines = wrapText(
+    "The best investment you can make is in yourself. Knowledge is the currency that never devalues.",
+    ITAL,
+    14,
+    TEXT_WIDTH - 40,
+  );
+  
+  let quoteY = PAGE_H / 2 + 40;
+  backPage.drawText('"', {
+    x: LEFT_MARGIN + 25,
+    y: quoteY + 20,
+    size: 52,
+    font: BOLD,
+    color: ACCENT,
+    opacity: 0.3,
+  });
+  
+  for (const line of quoteLines) {
+    backPage.drawText(line, {
       x: LEFT_MARGIN + 25,
-      y: quoteY - 48,
-      size: 10,
-      font: BOLD,
-      color: rgb(1, 1, 1),
+      y: quoteY,
+      size: 14,
+      font: ITAL,
+      color: rgb(0.75, 0.75, 0.82),
     });
-    backPage.drawText("Premium Digital Products", {
-      x: LEFT_MARGIN + 25,
-      y: quoteY - 64,
-      size: 8,
-      font: REG,
-      color: GRAY_MID,
-    });
+    quoteY -= 22;
+  }
+  
+  backPage.drawRectangle({
+    x: LEFT_MARGIN + 25,
+    y: quoteY - 15,
+    width: 40,
+    height: 2,
+    color: ACCENT,
+    opacity: 0.6,
+  });
+}
 
     const pdfBytes = await doc.save();
 
