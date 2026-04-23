@@ -1,5 +1,8 @@
 // app/api/generate/route.ts
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { canGenerateEbook, incrementUsage } from '@/lib/subscription/server'
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY!
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -9,6 +12,7 @@ async function callGroq(
   maxTokens = 3000,
   retries = 5
 ): Promise<string> {
+  // ... keep your existing callGroq function exactly as is ...
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -45,6 +49,7 @@ async function callGroq(
 }
 
 function stripMd(text: string): string {
+  // ... keep your existing stripMd function ...
   return text
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
@@ -55,6 +60,7 @@ function stripMd(text: string): string {
 }
 
 function extractJSON(raw: string): any {
+  // ... keep your existing extractJSON function ...
   if (!raw) return null
   try {
     let cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
@@ -70,6 +76,51 @@ function extractJSON(raw: string): any {
 }
 
 export async function POST(req: Request) {
+  // ========== 🔒 SUBSCRIPTION CHECK - ADD THIS FIRST ==========
+  
+  // Create Supabase client with cookies
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+get(name: string) { return cookieStore.get(name)?.value },        set() { },
+        remove() { },
+      },
+    }
+  )
+
+  // Get authenticated user
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json(
+      { error: 'Unauthorized', message: 'Please login to generate ebooks' },
+      { status: 401 }
+    )
+  }
+
+  // Check if user can generate (plan limits)
+  const { allowed, remaining, limit, planId } = await canGenerateEbook(user.id)
+
+  if (!allowed) {
+    return NextResponse.json(
+      { 
+        error: 'monthly_limit_reached',
+        message: `You've reached your ${planId} plan limit of ${limit} ebooks this month. Upgrade to continue generating.`,
+        remaining: 0,
+        limit,
+        planId,
+        upgradeUrl: '/pricing'
+      },
+      { status: 403 }
+    )
+  }
+
+  // ========== END OF SUBSCRIPTION CHECK ==========
+  
+  // Continue with your existing generation code...
   const { idea } = await req.json()
   const chaptersCount = idea.chapterCount || 6
   const bookLength = idea.bookLength || 'medium'
@@ -289,6 +340,9 @@ No markdown, no bold.`
         ], 300)
         callToAction = stripMd(callToAction).replace(/\*\*/g, '').replace(/\*/g, '')
 
+        // ========== AFTER SUCCESSFUL GENERATION, INCREMENT USAGE ==========
+        await incrementUsage(user.id)
+
         send('done', {
           content: {
             title: outline.title,
@@ -297,7 +351,9 @@ No markdown, no bold.`
             chapters: chapters,
             conclusion: conclusion || `You've completed this journey. Now it's time to take action. Start with one small step today.`,
             callToAction: callToAction || `Download this guide and implement one strategy today. Your future self will thank you.`
-          }
+          },
+          // Also return usage info to the client
+          usage: { remaining: remaining - 1, limit, planId }
         })
 
       } catch (error: any) {

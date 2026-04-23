@@ -13,14 +13,23 @@ export interface EbookDraft {
   chapterCount: number
   tone: string
   bookLength: string
+  userId?: string
   savedAt?: string
+  isFromLibrary?: boolean  // Add this to track library imports
 }
 
 // Save draft to localStorage
 export function saveDraft(draft: Partial<EbookDraft>) {
   if (typeof window === 'undefined') return
+  
+  // Don't save if this is a library restore
+  if (draft.isFromLibrary) return
+  
+  const userId = localStorage.getItem('sb-user-id');
+  
   localStorage.setItem('forge_draft', JSON.stringify({
     ...draft,
+    userId: userId,
     savedAt: new Date().toISOString()
   }))
 }
@@ -33,7 +42,9 @@ export function loadDraft(): Partial<EbookDraft> | null {
   
   try {
     const data = JSON.parse(draft)
-    // Only restore if less than 24 hours old
+    // If this is from library, ignore it
+    if (data.isFromLibrary) return null
+    
     const savedAt = new Date(data.savedAt)
     const hoursDiff = (new Date().getTime() - savedAt.getTime()) / (1000 * 60 * 60)
     if (hoursDiff > 24) {

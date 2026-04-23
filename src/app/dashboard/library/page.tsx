@@ -57,24 +57,30 @@ export default function LibraryPage() {
   }, [searchQuery, ebooks])
 
   // Handle Open - sends to forge page at Step 5 (editing stage)
-  const handleOpen = (ebook: Ebook) => {
-    // Store the ebook data in sessionStorage to restore in forge
-    sessionStorage.setItem('forge_restore_ebook', JSON.stringify({
-      id: ebook.id,
-      title: ebook.title,
-      subtitle: ebook.subtitle,
-      content: ebook.content,
-      theme: ebook.theme,
-      template: ebook.template,
-      coverImageUrl: ebook.cover_image_url,
-      chapterCount: ebook.chapter_count,
-      niche: ebook.niche,
-      step: 5 // Direct to editing stage
-    }))
-    
-    toast.success(`Loading "${ebook.title}"...`)
-    router.push('/dashboard/forge')
-  }
+// In library/page.tsx, update the handleOpen function
+// In library/page.tsx - replace the handleOpen function
+const handleOpen = (ebook: Ebook) => {
+  // Clear any existing forge data
+  sessionStorage.removeItem('forgeIdea');
+  sessionStorage.removeItem('forge_restore_ebook');
+  
+  // Store the ebook data
+  sessionStorage.setItem('forge_restore_ebook', JSON.stringify({
+    id: ebook.id,
+    title: ebook.title,
+    subtitle: ebook.subtitle || '',
+    content: ebook.content,
+    theme: ebook.theme,
+    template: ebook.template,
+    coverImageUrl: ebook.cover_image_url,
+    chapterCount: ebook.chapter_count,
+    niche: ebook.niche || 'General'
+  }));
+  
+  toast.success(`Loading "${ebook.title}"...`);
+  // Force a hard reload to ensure fresh state
+  window.location.href = '/dashboard/forge';
+}
 
   const handleDownloadPDF = async (ebook: Ebook) => {
     setDownloadingId(ebook.id)

@@ -5,8 +5,9 @@ import { useState } from 'react'
 import { 
   DollarSign, ShoppingCart, X, Mail, Copy, Check, 
   Sparkles, ExternalLink, Briefcase, FileText, Code, 
-  Share2, MessageCircle, Download, Eye, Zap
+  Share2, MessageCircle, Download, Eye, Zap, Lock
 } from 'lucide-react'
+import Link from 'next/link'
 
 interface MonetizationPanelProps {
   ebookData: {
@@ -15,15 +16,19 @@ interface MonetizationPanelProps {
     chapters: any[]
     targetAudience?: string
   }
+  userPlan?: string
 }
 
-export function MonetizationPanel({ ebookData }: MonetizationPanelProps) {
+export function MonetizationPanel({ ebookData, userPlan = 'free' }: MonetizationPanelProps) {
   const [activeTab, setActiveTab] = useState<'sell' | 'sales-page' | 'bundle'>('sell')
   const [salesPage, setSalesPage] = useState<any>(null)
   const [bundle, setBundle] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+
+const isPremium = userPlan !== 'free'
+
 
   const suggestedPrices = [
     { value: 7, label: '$7', desc: 'Impulse buy', color: 'bg-green-500' },
@@ -101,6 +106,33 @@ Perfect for ${ebookData.targetAudience || 'entrepreneurs'} who want to:
 Instant PDF Download • Lifetime Access • Money-Back Guarantee`
   }
 
+  if (!isPremium) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-8 text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-amber-600" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 mb-2">Upgrade to Unlock Monetization</h3>
+          <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
+            Sales pages, social media content, and email sequences are available on Starter and Pro plans.
+          </p>
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-xl transition"
+          >
+            <Zap className="w-4 h-4" fill="white" />
+            Upgrade Now
+          </Link>
+          <p className="text-xs text-slate-400 mt-4">
+            Starter plan starts at $9/month • Cancel anytime
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       {/* Tabs */}

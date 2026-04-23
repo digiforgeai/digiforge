@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import {
@@ -21,8 +21,8 @@ import { createClient } from "@/lib/supabase/client";
 import { MonetizationPanel } from '@/components/MonetizationPanel'
 import { saveDraft, loadDraft, clearDraft, saveToSupabase } from '@/lib/draft-storage'
 import { toast } from 'sonner'
-
-
+import { useSubscription } from '@/lib/hooks/useSubscription'
+import { ForgeError } from "@/components/ForgeError";
 
 interface Idea {
   title: string;
@@ -162,192 +162,225 @@ function buildGenSteps(n: number): string[] {
 export default function ForgePage() {
   const router = useRouter();
   const supabase = createClient();
+  
+  // ========== ALL STATE ==========
   const [idea, setIdea] = useState<Idea | null>(null);
   const [step, setStep] = useState(1);
-  const [bookLength, setBookLength] = useState<"short" | "medium" | "long">(
-    "medium",
-  );
-  const [pdfTemplate, setPdfTemplate] = useState<"premium" | "classic">(
-    "premium",
-  );
+  const [bookLength, setBookLength] = useState<"short" | "medium" | "long">("medium");
+  const [pdfTemplate, setPdfTemplate] = useState<"premium" | "classic">("premium");
   const [exportProgress, setExportProgress] = useState(0);
-
-  // Step 1 — Style
   const [theme, setTheme] = useState("indigo");
   const [template, setTemplate] = useState("modern");
-
-  // Step 2 — Cover
   const [photos, setPhotos] = useState<any[]>([]);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Step 3 — Customize
   const [customTitle, setCustomTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [tone, setTone] = useState("Professional");
   const [chapterCount, setChapterCount] = useState(6);
   const [targetPrice, setTargetPrice] = useState("$9.99");
-
-  // Step 4 — Generate
   const [genSteps, setGenSteps] = useState<string[]>(buildGenSteps(6));
   const [genStep, setGenStep] = useState(0);
   const [content, setContent] = useState<PDFContent | null>(null);
   const [genError, setGenError] = useState("");
   const [generating, setGenerating] = useState(false);
-
-  // Step 5 — Preview / Edit
   const [editingChapter, setEditingChapter] = useState<number | null>(null);
   const [editedContent, setEditedContent] = useState<PDFContent | null>(null);
-
-  // Step 6 — Export
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
-  const [showMonetization, setShowMonetization] = useState(false)
-
-  const [showDraftPrompt, setShowDraftPrompt] = useState(false)
-const [draftData, setDraftData] = useState<any>(null)
-
+  const [showMonetization, setShowMonetization] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const { plan, usage, loading: subscriptionLoading } = useSubscription();
+  const [forgeError, setForgeError] = useState<string | null>(null);
+  const [showDraftPrompt, setShowDraftPrompt] = useState(false);
+  const [draftData, setDraftData] = useState<any>(null);
 
   const activeTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem("forgeIdea");
-    if (!stored) {
-      router.push("/dashboard/generate");
-      return;
-    }
-    const parsed = JSON.parse(stored);
-    setIdea(parsed);
-    setCustomTitle(parsed.title);
-    setSubtitle(parsed.angle || "");
-    // Restore theme if previously set
-    if (parsed.theme) setTheme(parsed.theme);
-    fetchPhotos(parsed.niche || parsed.title);
-  }, []);
-
-  // Add this with your other useEffects (around line 150-200)
-
-// Check for restored ebook from library
-useEffect(() => {
-  const restoredEbook = sessionStorage.getItem('forge_restore_ebook')
-  if (restoredEbook) {
-    try {
-      const ebook = JSON.parse(restoredEbook)
-      
-      // Restore all the data
-      setCustomTitle(ebook.title)
-      setSubtitle(ebook.subtitle || '')
-      setEditedContent(ebook.content)
-      setContent(ebook.content)
-      setTheme(ebook.theme || 'indigo')
-      setPdfTemplate(ebook.template || 'premium')
-      setChapterCount(ebook.chapterCount || 6)
-      
-      // Restore cover image if exists
-      if (ebook.coverImageUrl) {
-        setSelectedPhoto({ urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl } })
-      }
-      
-      // Set idea data for context
-      setIdea({
-        title: ebook.title,
-        angle: ebook.subtitle || '',
-        targetAudience: ebook.niche || 'Readers',
-        forgeScore: 85,
-        trend: 'Hot',
-        niche: ebook.niche || 'General'
-      })
-      
-      // Jump to step 5 (preview & edit)
-      setStep(5)
-      
-      // Clear the session storage
-      sessionStorage.removeItem('forge_restore_ebook')
-      
-      toast.success(`Loaded "${ebook.title}" successfully`)
-    } catch (err) {
-      console.error('Failed to restore ebook:', err)
-      toast.error('Failed to load ebook')
-    }
-  }
-}, [])
-
-
-  // Auto-save draft on every change (simple)
-useEffect(() => {
-  // Don't save while generating
-  if (generating) return
-  
-  // Don't save if no content yet
-  if (!customTitle && step === 1) return
-  
-  const draft = {
-    title: customTitle,
-    subtitle: subtitle,
-    content: editedContent || content,
-    theme: theme,
-    template: pdfTemplate,
-    coverImageUrl: selectedPhoto?.urls?.regular || null,
-    step: step,
-    chapterCount: chapterCount,
-    tone: tone,
-    bookLength: bookLength
-  }
-  
-  saveDraft(draft)
-}, [customTitle, subtitle, editedContent, content, theme, pdfTemplate, selectedPhoto, step, chapterCount, tone, bookLength, generating])
-
-// Check for draft on page load
-useEffect(() => {
-  const draft = loadDraft()
-  if (draft && draft.content && !content && step === 1) {
-    setDraftData(draft)
-    setShowDraftPrompt(true)
-  }
-}, [])
-
-
-
-  useEffect(() => {
-    setGenSteps(buildGenSteps(chapterCount));
-  }, [chapterCount]);
-
-  // In forge/page.tsx - fetchPhotos function
-  const fetchPhotos = async (query: string) => {
+  // ========== FETCH PHOTOS ==========
+  const fetchPhotos = useCallback(async (query: string) => {
     if (!query) return;
-
     setPhotosLoading(true);
     setPhotos([]);
-
     try {
-      // Add timeout to the fetch
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(
-        `/api/unsplash?query=${encodeURIComponent(query)}`,
-        {
-          signal: controller.signal,
-        },
-      );
+      const res = await fetch(`/api/unsplash?query=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      });
       clearTimeout(timeoutId);
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const data = await res.json();
       setPhotos(data.photos || []);
       if (data.photos?.length) setSelectedPhoto(data.photos[0]);
     } catch (err) {
       console.error("Unsplash fetch error:", err);
-      // Don't show error to user - just show no images
       setPhotos([]);
       setSelectedPhoto(null);
     } finally {
       setPhotosLoading(false);
     }
-  };
+  }, []);
 
+  // ========== SIMPLE INITIALIZATION - RUNS ONCE ==========
+  useEffect(() => {
+    // Check for library restore first
+    const restoredEbook = sessionStorage.getItem('forge_restore_ebook');
+    
+    if (restoredEbook) {
+      try {
+        const ebook = JSON.parse(restoredEbook);
+        setCustomTitle(ebook.title);
+        setSubtitle(ebook.subtitle || '');
+        setEditedContent(ebook.content);
+        setContent(ebook.content);
+        setTheme(ebook.theme || 'indigo');
+        setPdfTemplate(ebook.template || 'premium');
+        setChapterCount(ebook.chapterCount || 6);
+        if (ebook.coverImageUrl) {
+          setSelectedPhoto({ urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl } });
+        }
+        setIdea({
+          title: ebook.title,
+          angle: ebook.subtitle || '',
+          targetAudience: ebook.niche || 'Readers',
+          forgeScore: 85,
+          trend: 'Hot',
+          niche: ebook.niche || 'General'
+        });
+        setStep(5);
+        sessionStorage.removeItem('forge_restore_ebook');
+        toast.success(`Loaded "${ebook.title}" successfully`);
+        return;
+      } catch (err) {
+        console.error('Failed to restore ebook:', err);
+        sessionStorage.removeItem('forge_restore_ebook');
+      }
+    }
+    
+    // Check for regular forge idea
+    const stored = sessionStorage.getItem("forgeIdea");
+    
+    if (!stored) {
+      setForgeError("No product selected. Please generate or select an idea first.");
+      return;
+    }
+    
+    try {
+      const parsed = JSON.parse(stored);
+      
+      if (!parsed.title || !parsed.niche) {
+        sessionStorage.removeItem("forgeIdea");
+        setForgeError("Invalid product data. Please generate a new idea.");
+        return;
+      }
+      
+      // Check if idea is expired (older than 24 hours)
+      const ideaTimestamp = parsed.timestamp;
+      if (ideaTimestamp) {
+        const hoursOld = (Date.now() - ideaTimestamp) / (1000 * 60 * 60);
+        if (hoursOld > 24) {
+          sessionStorage.removeItem("forgeIdea");
+          setForgeError("This idea has expired. Please generate a fresh idea.");
+          return;
+        }
+      }
+      
+      // Restore content if exists
+      if (parsed.content) {
+        setEditedContent(parsed.content);
+        setContent(parsed.content);
+        setStep(5);
+        if (parsed.theme) setTheme(parsed.theme);
+        if (parsed.template) setPdfTemplate(parsed.template);
+        if (parsed.chapterCount) setChapterCount(parsed.chapterCount);
+        if (parsed.coverImageUrl) {
+          setSelectedPhoto({ urls: { regular: parsed.coverImageUrl, small: parsed.coverImageUrl } });
+        }
+      }
+      
+      setIdea(parsed);
+      setCustomTitle(parsed.title);
+      setSubtitle(parsed.angle || "");
+      if (parsed.theme) setTheme(parsed.theme);
+      fetchPhotos(parsed.niche || parsed.title);
+      
+    } catch (err) {
+      console.error("Failed to parse forge idea:", err);
+      sessionStorage.removeItem("forgeIdea");
+      setForgeError("Invalid product data. Please generate a new idea.");
+    }
+  }, []); // Empty dependency array - runs once on mount
+
+  // ========== AUTO-SAVE DRAFT ==========
+  useEffect(() => {
+    if (generating) return;
+    if (!customTitle && step === 1) return;
+    
+    const draft = {
+      title: customTitle,
+      subtitle: subtitle,
+      content: editedContent || content,
+      theme: theme,
+      template: pdfTemplate,
+      coverImageUrl: selectedPhoto?.urls?.regular || null,
+      step: step,
+      chapterCount: chapterCount,
+      tone: tone,
+      bookLength: bookLength,
+    };
+    saveDraft(draft);
+  }, [customTitle, subtitle, editedContent, content, theme, pdfTemplate, selectedPhoto, step, chapterCount, tone, bookLength, generating]);
+
+  // ========== DRAFT CHECK ==========
+  useEffect(() => {
+    if (editedContent || content) return;
+    
+    const draft = loadDraft();
+    if (draft && draft.content && step === 1 && !sessionStorage.getItem("forgeIdea")) {
+      const currentUserId = localStorage.getItem('sb-user-id');
+      const draftUserId = draft.userId;
+      
+      if (currentUserId && draftUserId && currentUserId !== draftUserId) {
+        clearDraft();
+        return;
+      }
+      setDraftData(draft);
+      setShowDraftPrompt(true);
+    }
+  }, [editedContent, content, step]);
+
+  // ========== UPDATE GEN STEPS ==========
+  useEffect(() => {
+    setGenSteps(buildGenSteps(chapterCount));
+  }, [chapterCount]);
+
+  // ========== CLEAR DRAFT ON LOGOUT ==========
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+      if (event === 'SIGNED_OUT') {
+        clearDraft();
+        setShowDraftPrompt(false);
+        setDraftData(null);
+      }
+    });
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [supabase]);
+
+  // ========== CLEAR FORGE DATA ON UNMOUNT ==========
+  useEffect(() => {
+    return () => {
+      const isFromLibrary = sessionStorage.getItem('forge_restore_ebook');
+      if (!isFromLibrary) {
+        sessionStorage.removeItem('forgeIdea');
+      }
+    };
+  }, []);
+
+  // ========== FUNCTIONS ==========
   const handleGenerate = async (regenerate = false) => {
     if (!idea) return;
     setGenerating(true);
@@ -357,7 +390,6 @@ useEffect(() => {
       setContent(null);
       setEditedContent(null);
     }
-
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -369,16 +401,14 @@ useEffect(() => {
             targetAudience: idea.targetAudience,
             tone,
             chapterCount,
-            bookLength, // 👈 ADD THIS
+            bookLength,
           },
         }),
       });
       if (!res.ok || !res.body) throw new Error("Request failed");
-
-      const reader = res.body.getReader(),
-        decoder = new TextDecoder();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
       let buffer = "";
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -391,22 +421,12 @@ useEffect(() => {
             const data = JSON.parse(line.slice(6));
             if (data.event === "progress") {
               const idx = genSteps.findIndex((s) =>
-                s
-                  .toLowerCase()
-                  .includes(
-                    data.step
-                      ?.toLowerCase()
-                      ?.split(" ")
-                      .slice(0, 3)
-                      .join(" ") || "",
-                  ),
+                s.toLowerCase().includes(data.step?.toLowerCase()?.split(" ").slice(0, 3).join(" ") || "")
               );
               if (idx !== -1) setGenStep(idx);
-              else
-                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
+              else setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
             }
-            if (data.event === "chapter_done")
-              setGenStep(2 + (data.chapter - 1));
+            if (data.event === "chapter_done") setGenStep(2 + (data.chapter - 1));
             if (data.event === "done") {
               setGenStep(genSteps.length - 1);
               await sleep(600);
@@ -431,18 +451,13 @@ useEffect(() => {
       setExportError("No content available. Please generate the ebook first.");
       return;
     }
-
     setExporting(true);
     setExportError("");
-
     try {
       console.log("📄 Starting PDF export for:", customTitle);
-
-      // REMOVE the abort controller - it's causing issues
       const response = await fetch("/api/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // Remove: signal: controller.signal,
         body: JSON.stringify({
           content: {
             title: editedContent.title || customTitle,
@@ -458,24 +473,27 @@ useEffect(() => {
           template: pdfTemplate || "premium",
         }),
       });
-
       console.log("Response status:", response.status);
-
+      if (response.status === 403) {
+        const errorData = await response.json();
+        if (errorData.error === 'plan_restricted') {
+          setShowUpgradeModal(true);
+          setExportError(errorData.message || "This feature requires an upgrade");
+          setExporting(false);
+          return;
+        }
+        throw new Error(errorData.message || `Export failed: ${response.status}`);
+      }
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Export failed:", errorText);
         throw new Error(`Export failed: ${response.status}`);
       }
-
-      // Get the PDF blob
       const blob = await response.blob();
       console.log("PDF blob received, size:", blob.size, "bytes");
-
       if (blob.size < 1000) {
         console.warn("PDF seems too small:", blob.size);
       }
-
-      // Create download link
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -484,30 +502,26 @@ useEffect(() => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
       console.log("PDF download triggered successfully");
-
-      // In handleExport, after successful PDF download, add:
-try {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user && editedContent) {
-    await saveToSupabase({
-      title: editedContent.title || customTitle,
-      subtitle: editedContent.subtitle || subtitle,
-      niche: idea?.niche || '',
-      theme: theme,
-      template: pdfTemplate || 'premium',
-      chapterCount: editedContent.chapters?.length || 0,
-      coverImageUrl: selectedPhoto?.urls?.regular || null,
-      content: editedContent
-    })
-    console.log('Ebook saved to your library')
-    clearDraft() // Clear draft after successful save
-  }
-} catch (err) {
-  console.error('Could not save to library:', err)
-}
-
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && editedContent) {
+          await saveToSupabase({
+            title: editedContent.title || customTitle,
+            subtitle: editedContent.subtitle || subtitle,
+            niche: idea?.niche || '',
+            theme: theme,
+            template: pdfTemplate || 'premium',
+            chapterCount: editedContent.chapters?.length || 0,
+            coverImageUrl: selectedPhoto?.urls?.regular || null,
+            content: editedContent
+          });
+          console.log('Ebook saved to your library');
+          clearDraft();
+        }
+      } catch (err) {
+        console.error('Could not save to library:', err);
+      }
       setStep(6);
     } catch (err: any) {
       console.error("Export error details:", err);
@@ -525,30 +539,55 @@ try {
     setEditedContent(updated);
   };
 
-  if (!idea) return null;
-
-  // Restore draft function
-const restoreDraft = () => {
-  if (draftData) {
-    if (draftData.title) setCustomTitle(draftData.title)
-    if (draftData.subtitle) setSubtitle(draftData.subtitle)
-    if (draftData.content) {
-      setContent(draftData.content)
-      setEditedContent(draftData.content)
+  const restoreDraft = () => {
+    if (draftData) {
+      if (draftData.title) setCustomTitle(draftData.title);
+      if (draftData.subtitle) setSubtitle(draftData.subtitle);
+      if (draftData.content) {
+        setContent(draftData.content);
+        setEditedContent(draftData.content);
+      }
+      if (draftData.theme) setTheme(draftData.theme);
+      if (draftData.template) setPdfTemplate(draftData.template);
+      if (draftData.selectedPhoto) setSelectedPhoto(draftData.selectedPhoto);
+      if (draftData.step) setStep(draftData.step);
+      if (draftData.chapterCount) setChapterCount(draftData.chapterCount);
+      if (draftData.tone) setTone(draftData.tone);
+      if (draftData.bookLength) setBookLength(draftData.bookLength);
+      setShowDraftPrompt(false);
+      clearDraft();
     }
-    if (draftData.theme) setTheme(draftData.theme)
-    if (draftData.template) setPdfTemplate(draftData.template)
-    if (draftData.selectedPhoto) setSelectedPhoto(draftData.selectedPhoto)
-    if (draftData.step) setStep(draftData.step)
-    if (draftData.chapterCount) setChapterCount(draftData.chapterCount)
-    if (draftData.tone) setTone(draftData.tone)
-    if (draftData.bookLength) setBookLength(draftData.bookLength)
-    
-    setShowDraftPrompt(false)
-    clearDraft()
-  }
-}
+  };
 
+  // ========== CONDITIONAL RETURNS ==========
+  if (forgeError) {
+    return (
+      <div className="flex w-full min-h-screen bg-[#f5f6fa]">
+        <Sidebar />
+        <main className="flex-1 md:ml-60 px-4 md:px-8 pt-20 md:pt-10 pb-16">
+          <ForgeError message={forgeError} />
+        </main>
+      </div>
+    );
+  }
+
+  if (!idea) {
+    return (
+      <div className="flex w-full min-h-screen bg-[#f5f6fa]">
+        <Sidebar />
+        <main className="flex-1 md:ml-60 px-4 md:px-8 pt-20 md:pt-10 pb-16">
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-slate-500">Loading...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+  
+  // ========== MAIN RETURN ==========
   return (
     <div className="flex w-full min-h-screen bg-[#f5f6fa]">
       <Sidebar />
@@ -569,6 +608,7 @@ const restoreDraft = () => {
               {customTitle}
             </p>
           </div>
+          
         </div>
 
         {/* Draft Restore Prompt */}
@@ -1147,16 +1187,21 @@ const restoreDraft = () => {
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button
-                onClick={() => {
-                  setStep(4);
-                  setTimeout(() => handleGenerate(false), 300);
-                }}
-                disabled={!customTitle}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
-              >
-                <Sparkles className="w-4 h-4" /> Generate {chapterCount}{" "}
-                Chapters
-              </button>
+  onClick={() => {
+    // Check if user can generate before starting
+    if (usage.remaining <= 0 && plan === 'free') {
+      setShowUpgradeModal(true);
+      toast.warning(`You've used all ${usage.limit} free generations this month. Upgrade to continue.`);
+      return;
+    }
+    setStep(4);
+    setTimeout(() => handleGenerate(false), 300);
+  }}
+  disabled={!customTitle}
+  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
+>
+  <Sparkles className="w-4 h-4" /> Generate {chapterCount} Chapters
+</button>
             </div>
           </div>
         )}
@@ -1269,15 +1314,22 @@ const restoreDraft = () => {
               </div>
               <div className="flex gap-2">
                 {/* Regenerate button */}
-                <button
-                  onClick={() => {
-                    setStep(4);
-                    setTimeout(() => handleGenerate(true), 300);
-                  }}
-                  className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-                </button>
+{/* Regenerate button - Updated with proper plan check */}
+<button
+  onClick={() => {
+    // Check if user can generate before regenerating
+    if (usage.remaining <= 0 && plan === 'free') {
+      setShowUpgradeModal(true);
+      toast.warning(`You've used all ${usage.limit} free generations this month. Upgrade to continue.`);
+      return;
+    }
+    setStep(4);
+    setTimeout(() => handleGenerate(true), 300);
+  }}
+  className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
+>
+  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+</button>
                 <button
                   onClick={handleExport}
                   disabled={exporting}
@@ -1502,14 +1554,20 @@ const restoreDraft = () => {
           <Edit3 className="w-4 h-4" /> Edit & Re-export
         </button>
         <button
-          onClick={() => {
-            setStep(4);
-            setTimeout(() => handleGenerate(true), 300);
-          }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-xl transition cursor-pointer text-sm shadow-md shadow-indigo-200"
-        >
-          <RefreshCw className="w-4 h-4" /> Regenerate
-        </button>
+  onClick={() => {
+    // Check if user can generate before regenerating
+    if (usage.remaining <= 0 && plan === 'free') {
+      setShowUpgradeModal(true);
+      toast.warning(`You've used all ${usage.limit} free generations this month. Upgrade to continue.`);
+      return;
+    }
+    setStep(4);
+    setTimeout(() => handleGenerate(true), 300);
+  }}
+  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-xl transition cursor-pointer text-sm shadow-md shadow-indigo-200"
+>
+  <RefreshCw className="w-4 h-4" /> Regenerate
+</button>
       </div>
     </div>
 
@@ -1532,17 +1590,18 @@ const restoreDraft = () => {
       </button>
 
       {showMonetization && editedContent && (
-        <div className="mt-4">
-          <MonetizationPanel 
-            ebookData={{
-              title: editedContent.title || customTitle,
-              subtitle: editedContent.subtitle || subtitle,
-              chapters: editedContent.chapters || [],
-              targetAudience: idea?.targetAudience
-            }}
-          />
-        </div>
-      )}
+  <div className="mt-4">
+    <MonetizationPanel 
+      ebookData={{
+        title: editedContent.title || customTitle,
+        subtitle: editedContent.subtitle || subtitle,
+        chapters: editedContent.chapters || [],
+        targetAudience: idea?.targetAudience
+      }}
+      userPlan={plan}
+    />
+  </div>
+)}
     </div>
   </div>
 )}
