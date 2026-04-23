@@ -1,10 +1,10 @@
-// app/pricing/page.tsx
+// app/pricing/page.tsx - UPDATED with accurate features
 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Zap, Check, ArrowRight, Sparkles, X, Star, TrendingUp, Shield, Clock, GitBranch, Crown, Menu } from 'lucide-react'
+import { Zap, Check, ArrowRight, Sparkles, X, Star, TrendingUp, Shield, Clock, GitBranch, Crown, Menu, Palette, FileText, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { PLANS, type PlanId } from '@/lib/pricing/types'
 
@@ -36,9 +36,20 @@ export default function PricingPage() {
     }
   }
 
+  // Updated plans with accurate data
   const plansForDisplay = [
     {
-      ...PLANS.free,
+      id: 'free',
+      name: 'Free',
+      price: 0,
+      description: 'Perfect for trying out DigiForge',
+      features: [
+        '5 ebook generations per month',
+        'Up to 3 chapters per ebook',
+        'Basic PDF export',
+        'Standard generation speed',
+        'Watermark included',
+      ],
       badge: null,
       cta: 'Get Started Free',
       ctaHref: '/dashboard/generate',
@@ -47,7 +58,19 @@ export default function PricingPage() {
       comingSoon: false,
     },
     {
-      ...PLANS.starter,
+      id: 'starter',
+      name: 'Starter',
+      price: 9,
+      description: 'For casual creators ready to publish',
+      features: [
+        '15 ebook generations per month', // Increased from 10
+        'Up to 6 chapters per ebook',
+        'Premium PDF layout',
+        'Chapter images included',
+        'Faster generation',
+        'No watermark',
+        '8 accent color themes',
+      ],
       badge: 'Most Popular',
       cta: 'Start Creating',
       ctaHref: '/signup?plan=starter',
@@ -56,13 +79,27 @@ export default function PricingPage() {
       comingSoon: false,
     },
     {
-      ...PLANS.pro,
-      badge: 'Coming Soon',
-      cta: 'Join Waitlist',
+      id: 'pro',
+      name: 'Pro',
+      price: 19,
+      description: 'For serious creators building a business',
+      features: [
+        '50 ebook generations per month', // Increased from 30
+        'Up to 12 chapters per ebook',
+        'Premium PDF layout',
+        'Chapter images included',
+        'Priority generation speed',
+        'PDF customization (fonts, layouts)',
+        'Multiple export formats (PDF + DOCX)',
+        'Cover image generation',
+        'No watermark',
+      ],
+      badge: null,
+      cta: 'Go Pro',
       ctaHref: '/signup?plan=pro',
       highlight: false,
       popular: false,
-      comingSoon: true,
+      comingSoon: false,
     },
   ]
 
@@ -72,10 +109,11 @@ export default function PricingPage() {
     return `$${yearly}`
   }
 
+  // Updated comparison table
   const comparisonFeatures = [
-    { name: 'Monthly ebook generations', free: '2', starter: '10', pro: '30' },
-    { name: 'Max chapters per ebook', free: '3', starter: '6', pro: '10' },
-    { name: 'PDF templates', free: '3', starter: '3', pro: '3' },
+    { name: 'Monthly ebook generations', free: '2', starter: '15', pro: '50' },
+    { name: 'Max chapters per ebook', free: '3', starter: '6', pro: '12' },
+    { name: 'PDF templates', free: '2', starter: '3', pro: '5+' },
     { name: 'Accent color themes', free: '8', starter: '8', pro: '8' },
     { name: 'Unsplash cover images', free: '✅', starter: '✅', pro: '✅' },
     { name: 'AI trend scoring', free: '✅', starter: '✅', pro: '✅' },
@@ -83,15 +121,16 @@ export default function PricingPage() {
     { name: 'Chapter images', free: '❌', starter: '✅', pro: '✅' },
     { name: 'No watermark', free: '❌', starter: '✅', pro: '✅' },
     { name: 'Priority generation speed', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'PDF customization (fonts/layouts)', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Multiple export formats', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'Cover image generation', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Commercial use rights', free: '✅', starter: '✅', pro: '✅' },
-    { name: 'Priority support', free: '❌', starter: '❌', pro: '✅' },
+  { name: 'Support', free: 'Community', starter: 'Standard', pro: 'Priority' },  // ← Professional
   ]
 
   return (
     <main className="min-h-screen bg-[#0a0b10] text-zinc-200">
-
-      {/* Navbar - Responsive */}
+      {/* Navbar - same as before */}
       <nav className="sticky top-0 z-50 backdrop-blur-2xl border-b border-white/[0.05] bg-[#0f1117]/80">
         <div className="flex items-center justify-between px-4 md:px-6 py-4 md:py-5 max-w-7xl mx-auto">
           <Link href="/" className="flex items-center gap-2 md:gap-3 group cursor-pointer shrink-0">
@@ -138,7 +177,7 @@ export default function PricingPage() {
         )}
       </nav>
 
-      {/* Header - Responsive */}
+      {/* Header */}
       <section className="relative max-w-4xl mx-auto px-4 md:px-6 pt-16 md:pt-20 pb-12 md:pb-16 text-center">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] md:w-[500px] h-[200px] md:h-[300px] bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="relative z-10">
@@ -153,7 +192,7 @@ export default function PricingPage() {
             Start free. Upgrade when you're ready to scale. Cancel anytime.
           </p>
 
-          {/* Billing Toggle - Responsive */}
+          {/* Billing Toggle */}
           <div className="flex items-center justify-center gap-3 md:gap-4 mt-6 md:mt-8">
             <span className={`text-xs md:text-sm font-bold transition ${billingInterval === 'month' ? 'text-white' : 'text-zinc-600'}`}>
               Monthly
@@ -174,7 +213,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Plans - Responsive Grid */}
+      {/* Plans Grid */}
       <section className="max-w-7xl mx-auto px-4 md:px-6 pb-16 md:pb-24">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
           {plansForDisplay.map((plan) => {
@@ -246,7 +285,7 @@ export default function PricingPage() {
                 <div className={`h-px mb-4 md:mb-6 ${plan.highlight ? 'bg-white/20' : 'bg-white/[0.06]'}`} />
 
                 <ul className="space-y-2 md:space-y-3">
-                  {plan.features.slice(0, 6).map((feat, j) => (
+                  {plan.features.map((feat, j) => (
                     <li key={j} className="flex items-start gap-2 md:gap-2.5">
                       <Check className={`w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 mt-0.5 ${plan.highlight ? 'text-white' : 'text-indigo-400'}`} />
                       <span className={`text-[11px] md:text-xs ${plan.highlight ? 'text-white' : 'text-zinc-400'}`}>{feat}</span>
@@ -258,7 +297,7 @@ export default function PricingPage() {
           })}
         </div>
 
-        {/* Comparison Table Toggle - Responsive */}
+        {/* Comparison Table Toggle */}
         <div className="text-center mt-10 md:mt-12">
           <button
             onClick={() => setShowComparison(!showComparison)}
@@ -270,7 +309,7 @@ export default function PricingPage() {
           </button>
         </div>
 
-        {/* Comparison Table - Horizontal Scroll on Mobile */}
+        {/* Comparison Table */}
         {showComparison && (
           <div className="mt-6 md:mt-8 bg-zinc-900/40 rounded-xl md:rounded-2xl border border-white/[0.07] overflow-x-auto">
             <div className="min-w-[640px] md:min-w-0">
@@ -301,7 +340,7 @@ export default function PricingPage() {
           </div>
         )}
 
-        {/* Trust Badges - Responsive */}
+        {/* Trust Badges */}
         <div className="mt-10 md:mt-12 text-center">
           <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8">
             <div className="flex items-center gap-2 text-zinc-600 text-[11px] md:text-sm">
@@ -329,7 +368,6 @@ export default function PricingPage() {
           </p>
         </div>
       </section>
-
     </main>
   )
 }

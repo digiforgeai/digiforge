@@ -683,6 +683,80 @@ export default function ForgePage() {
     }
   };
 
+  // Add this function alongside handleExport
+const handleDocxExport = async () => {
+  if (!editedContent) {
+    console.error("No content to export");
+    setExportError("No content available. Please generate the ebook first.");
+    return;
+  }
+
+  // Double-check Pro plan
+  if (plan !== "pro") {
+    setShowUpgradeModal(true);
+    toast.error("DOCX export is only available on Pro plans");
+    return;
+  }
+
+  setExporting(true);
+  setExportError("");
+  try {
+    console.log("📄 Starting DOCX export for:", customTitle);
+    const response = await fetch("/api/docx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: {
+          title: editedContent.title || customTitle,
+          subtitle: editedContent.subtitle || subtitle,
+          introduction: editedContent.introduction || "",
+          chapters: editedContent.chapters || [],
+          conclusion: editedContent.conclusion || "",
+          callToAction: editedContent.callToAction || "",
+        },
+        title: customTitle,
+        coverImageUrl: selectedPhoto?.urls?.regular || null,
+        theme: theme,
+      }),
+    });
+
+    if (response.status === 403) {
+      const errorData = await response.json();
+      if (errorData.error === "plan_restricted") {
+        setShowUpgradeModal(true);
+        setExportError(errorData.message || "DOCX export requires Pro plan");
+        setExporting(false);
+        return;
+      }
+      throw new Error(errorData.message || `Export failed: ${response.status}`);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("DOCX export failed:", errorText);
+      throw new Error(`Export failed: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${customTitle.replace(/[^a-z0-9]/gi, "_").slice(0, 50)}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success("DOCX exported successfully!");
+  } catch (err: any) {
+    console.error("DOCX export error:", err);
+    setExportError(err.message || "DOCX export failed. Please try again.");
+    toast.error("DOCX export failed");
+  } finally {
+    setExporting(false);
+  }
+};
+
   const updateChapter = (idx: number, field: string, value: string) => {
     if (!editedContent) return;
     const updated = { ...editedContent };
@@ -1691,47 +1765,60 @@ export default function ForgePage() {
                   Edit any section, then export your PDF
                 </p>
               </div>
-              <div className="flex gap-2">
-                {/* Regenerate button */}
-                <button
-                  onClick={async () => {
-                    // Refresh usage data first to ensure we have latest count
-                    await refreshUsage();
+{/* // In step 5, replace the export button section with this: */}
 
-                    // Check if user can generate before regenerating
-                    if (usage.remaining <= 0 && plan === "free") {
-                      setShowUpgradeModal(true);
-                      toast.warning(
-                        `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
-                      );
-                      return;
-                    }
-                    setStep(4);
-                    setTimeout(() => handleGenerate(true), 300);
-                  }}
-                  className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-                </button>
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className={`w-full font-black py-4 p-3 rounded-xl flex items-center justify-center gap-2 transition shadow-md cursor-pointer text-sm ${
-                    exporting
-                      ? "bg-indigo-400 cursor-not-allowed"
-                      : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
-                  } text-white`}
-                >
-                  {exporting ? (
-                    <>Generating PDF...</>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4" />
-                      Export PDF
-                    </>
-                  )}
-                </button>
-              </div>
+<div className="flex gap-2">
+  {/* Regenerate button */}
+  <button
+    onClick={async () => {
+      await refreshUsage();
+      if (usage.remaining <= 0 && plan === "free") {
+        setShowUpgradeModal(true);
+        toast.warning(
+          `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
+        );
+        return;
+      }
+      setStep(4);
+      setTimeout(() => handleGenerate(true), 300);
+    }}
+    className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
+  >
+    <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+  </button>
+
+  {/* DOCX Export - Pro Only */}
+  {plan === "pro" && (
+    <button
+      onClick={handleDocxExport}
+      disabled={exporting}
+      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+    >
+      <FileText className="w-3.5 h-3.5" />
+      {exporting ? "..." : "DOCX"}
+    </button>
+  )}
+
+  {/* PDF Export */}
+  <button
+    onClick={handleExport}
+    disabled={exporting}
+    className={`flex items-center gap-2 font-black text-xs px-4 py-2.5 rounded-xl transition cursor-pointer ${
+      exporting
+        ? "bg-indigo-400 cursor-not-allowed"
+        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
+    } text-white`}
+  >
+    {exporting ? (
+      <>Generating...</>
+    ) : (
+      <>
+        <Download className="w-3.5 h-3.5" />
+        PDF
+      </>
+    )}
+  </button>
+</div>
             </div>
 
             {exportError && (
@@ -1901,6 +1988,11 @@ export default function ForgePage() {
               <p className="text-slate-400 text-sm mb-8">
                 PDF downloaded. Your ebook has been saved to your library.
               </p>
+              {/* After PDF downloaded message */}
+<p className="text-slate-400 text-sm mb-8">
+  PDF downloaded{plan === "pro" ? " (DOCX also available in Pro)" : ""}. 
+  Your ebook has been saved to your library.
+</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
                 {[
                   { label: "Gumroad", emoji: "💰", url: "https://gumroad.com" },
