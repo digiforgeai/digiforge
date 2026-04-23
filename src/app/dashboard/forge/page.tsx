@@ -172,7 +172,14 @@ export default function ForgePage() {
   const [idea, setIdea] = useState<Idea | null>(null);
   const [step, setStep] = useState(1);
   const [bookLength, setBookLength] = useState<"short" | "medium" | "long">(
-    "medium",
+    () => {
+      // Default to 'short' for free plan
+      if (typeof window !== "undefined") {
+        const userPlan = localStorage.getItem("user-plan") || "free";
+        if (userPlan === "free") return "short";
+      }
+      return "medium";
+    },
   );
   const [pdfTemplate, setPdfTemplate] = useState<"premium" | "classic">(
     "premium",
@@ -187,7 +194,6 @@ export default function ForgePage() {
   const [customTitle, setCustomTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [tone, setTone] = useState("Professional");
-  const [chapterCount, setChapterCount] = useState(6);
   const [targetPrice, setTargetPrice] = useState("$9.99");
   const [genSteps, setGenSteps] = useState<string[]>(buildGenSteps(6));
   const [genStep, setGenStep] = useState(0);
@@ -210,8 +216,19 @@ export default function ForgePage() {
     refresh: refreshUsage,
   } = useSubscription();
 
+  const [includeChapterImages, setIncludeChapterImages] = useState(true);
   const activeTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
-
+  const [chapterCount, setChapterCount] = useState(() => {
+    // Try to get plan from localStorage or URL if available
+    if (typeof window !== "undefined") {
+      // Check if we're on a free plan (default)
+      const userPlan = localStorage.getItem("user-plan") || "free";
+      if (userPlan === "free") return 3;
+      if (userPlan === "starter") return 4;
+      if (userPlan === "pro") return 6;
+    }
+    return 3;
+  });
   // ========== FETCH PHOTOS ==========
   const fetchPhotos = useCallback(async (query: string) => {
     if (!query) return;
@@ -327,6 +344,20 @@ export default function ForgePage() {
     );
   }, []);
 
+  // Add this useEffect to reset chapter count when plan loads
+  useEffect(() => {
+    if (plan === "free") {
+      setChapterCount(3);
+      setBookLength("short"); // ← Force short length for free users
+    } else if (plan === "starter") {
+      setChapterCount(4);
+      setBookLength("medium"); // ← Default to medium for starter
+    } else if (plan === "pro") {
+      setChapterCount(6);
+      setBookLength("medium");
+    }
+  }, [plan]);
+
   // ========== AUTO-SAVE DRAFT ==========
   useEffect(() => {
     if (generating) return;
@@ -415,116 +446,169 @@ export default function ForgePage() {
   //   }, []);
 
   // ========== FUNCTIONS ==========
-  const handleGenerate = async (regenerate = false) => {
-    if (!idea) return;
-    setGenerating(true);
-    setGenStep(0);
-    setGenError("");
-    if (!regenerate) {
-      setContent(null);
-      setEditedContent(null);
-    }
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          idea: {
-            title: customTitle,
-            angle: subtitle,
-            targetAudience: idea.targetAudience,
-            tone,
-            chapterCount,
-            bookLength,
-          },
-        }),
-      });
-      if (!res.ok || !res.body) throw new Error("Request failed");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.event === "progress") {
-              const idx = genSteps.findIndex((s) =>
-                s
-                  .toLowerCase()
-                  .includes(
-                    data.step
-                      ?.toLowerCase()
-                      ?.split(" ")
-                      .slice(0, 3)
-                      .join(" ") || "",
-                  ),
-              );
-              if (idx !== -1) setGenStep(idx);
-              else
-                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
-            }
-            if (data.event === "chapter_done")
-              setGenStep(2 + (data.chapter - 1));
-            if (data.event === "done") {
-              setGenStep(genSteps.length - 1);
-              await sleep(600);
-              setContent(data.content);
-              setEditedContent(data.content);
-              setStep(5);
-
-              await refreshUsage();
-
-              // ========== SAVE TO DATABASE ONLY ON FIRST GENERATION ==========
-              // Check if this is a new generation (not a restore from library)
-              const isFromLibrary =
-                sessionStorage.getItem("isFromLibrary") === "true";
-              const isNewGeneration =
-                !isFromLibrary &&
-                !sessionStorage.getItem("forge_restore_ebook");
-
-              if (isNewGeneration) {
-                try {
-                  const {
-                    data: { user },
-                  } = await supabase.auth.getUser();
-                  if (user && data.content) {
-                    await saveToSupabase({
-                      title: data.content.title || customTitle,
-                      subtitle: data.content.subtitle || subtitle,
-                      niche: idea?.niche || "",
-                      theme: theme,
-                      template: pdfTemplate || "premium",
-                      chapterCount: data.content.chapters?.length || 0,
-                      coverImageUrl: selectedPhoto?.urls?.regular || null,
-                      content: data.content,
-                    });
-                    console.log("New ebook saved to library");
-                    clearDraft();
-                  }
-                } catch (err) {
-                  console.error("Could not save to library:", err);
+ const handleGenerate = async (regenerate = false) => {
+  if (!idea) return;
+  setGenerating(true);
+  setGenStep(0);
+  setGenError("");
+  
+  // Update genSteps to show priority messages for Pro users
+  if (plan === 'pro') {
+    const prioritySteps = [
+      "⚡ PRIORITY: Reading your customizations...",
+      "⚡ Writing introduction at lightning speed...",
+      ...Array.from({ length: chapterCount }, (_, i) => `⚡ Writing chapter ${i + 1} of ${chapterCount} (Priority)...`),
+      "⚡ Writing conclusion...",
+      "⚡ Finalizing your premium guide..."
+    ];
+    setGenSteps(prioritySteps);
+  } else {
+    setGenSteps(buildGenSteps(chapterCount));
+  }
+  
+  if (!regenerate) {
+    setContent(null);
+    setEditedContent(null);
+  }
+  
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        idea: {
+          title: customTitle,
+          angle: subtitle,
+          targetAudience: idea.targetAudience,
+          tone,
+          chapterCount,
+          bookLength,
+        },
+      }),
+    });
+    if (!res.ok || !res.body) throw new Error("Request failed");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          
+          if (data.event === "progress") {
+            // For Pro users, handle priority step progression
+            if (plan === 'pro') {
+              // Progress through steps based on the message content
+              const stepMessage = data.step || "";
+              
+              // Determine which step we're on
+              let stepIndex = -1;
+              
+              if (stepMessage.includes("Planning") || stepMessage.includes("structure")) {
+                stepIndex = 0;
+              } else if (stepMessage.includes("introduction") || stepMessage.includes("Intro")) {
+                stepIndex = 1;
+              } else if (stepMessage.includes("chapter")) {
+                // Extract chapter number from message
+                const chapterMatch = stepMessage.match(/chapter (\d+)/i);
+                if (chapterMatch) {
+                  const chapterNum = parseInt(chapterMatch[1]);
+                  stepIndex = 1 + chapterNum; // intro is 1, chapters start at 2
                 }
+              } else if (stepMessage.includes("conclusion")) {
+                stepIndex = 1 + chapterCount + 1; // after all chapters
+              } else if (stepMessage.includes("Finalizing")) {
+                stepIndex = 1 + chapterCount + 2; // last step
               }
-
-              // Clear the library flag
-              sessionStorage.removeItem("isFromLibrary");
+              
+              if (stepIndex !== -1 && stepIndex < genSteps.length) {
+                setGenStep(stepIndex);
+              } else {
+                // Fallback: increment step gradually
+                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 1));
+              }
+            } else {
+              // Regular users - use existing logic
+              const idx = genSteps.findIndex((s) =>
+                s.toLowerCase().includes(
+                  data.step?.toLowerCase()?.split(" ").slice(0, 3).join(" ") || ""
+                )
+              );
+              if (idx !== -1) {
+                setGenStep(idx);
+              } else {
+                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
+              }
             }
-            if (data.event === "error") throw new Error(data.message);
-          } catch {}
-        }
+          }
+          
+          if (data.event === "chapter_done") {
+            if (plan === 'pro') {
+              // Update to show current chapter progress
+              const chapterIndex = 1 + (data.chapter || 0);
+              if (chapterIndex < genSteps.length) {
+                setGenStep(chapterIndex);
+              }
+            } else {
+              setGenStep(2 + (data.chapter - 1));
+            }
+          }
+          
+          if (data.event === "done") {
+            setGenStep(genSteps.length - 1);
+            await sleep(600);
+            setContent(data.content);
+            setEditedContent(data.content);
+            setStep(5);
+            
+            await refreshUsage();
+            
+            // ========== SAVE TO DATABASE ONLY ON FIRST GENERATION ==========
+            const isFromLibrary = sessionStorage.getItem("isFromLibrary") === "true";
+            const isNewGeneration = !isFromLibrary && !sessionStorage.getItem("forge_restore_ebook");
+            
+            if (isNewGeneration) {
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user && data.content) {
+                  await saveToSupabase({
+                    title: data.content.title || customTitle,
+                    subtitle: data.content.subtitle || subtitle,
+                    niche: idea?.niche || "",
+                    theme: theme,
+                    template: pdfTemplate || "premium",
+                    chapterCount: data.content.chapters?.length || 0,
+                    coverImageUrl: selectedPhoto?.urls?.regular || null,
+                    content: data.content,
+                  });
+                  console.log("New ebook saved to library");
+                  clearDraft();
+                }
+              } catch (err) {
+                console.error("Could not save to library:", err);
+              }
+            }
+            
+            sessionStorage.removeItem("isFromLibrary");
+          }
+          
+          if (data.event === "error") throw new Error(data.message);
+        } catch {}
       }
-    } catch (err: any) {
-      setGenError(err.message || "Generation failed. Try again.");
-    } finally {
-      setGenerating(false);
     }
-  };
+  } catch (err: any) {
+    setGenError(err.message || "Generation failed. Try again.");
+  } finally {
+    setGenerating(false);
+  }
+};
 
   const handleExport = async () => {
     if (!editedContent) {
@@ -552,6 +636,8 @@ export default function ForgePage() {
           coverImageUrl: selectedPhoto?.urls?.regular || null,
           theme: theme,
           template: pdfTemplate || "premium",
+          includeChapterImages: includeChapterImages,
+          userPlan: plan,
         }),
       });
       console.log("Response status:", response.status);
@@ -1065,7 +1151,7 @@ export default function ForgePage() {
                   </div>
                 </div>
                 <div className="space-y-4">
-                  {/* BOOK LENGTH SELECTOR - PUT THIS HERE */}
+                  {/* BOOK LENGTH SELECTOR - WITH PLAN LIMITS */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
@@ -1088,6 +1174,7 @@ export default function ForgePage() {
                           desc: "Quick read",
                           icon: "⚡",
                           chapters: 4,
+                          plan: "all",
                         },
                         {
                           id: "medium",
@@ -1096,6 +1183,7 @@ export default function ForgePage() {
                           desc: "Standard",
                           icon: "📘",
                           chapters: 6,
+                          plan: "starter",
                         },
                         {
                           id: "long",
@@ -1104,100 +1192,292 @@ export default function ForgePage() {
                           desc: "Premium",
                           icon: "📚",
                           chapters: 10,
+                          plan: "pro",
                         },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          onClick={() => {
-                            setBookLength(
-                              opt.id as "short" | "medium" | "long",
-                            );
-                            setChapterCount(opt.chapters);
-                          }}
-                          className={`p-3 rounded-xl border-2 transition-all cursor-pointer text-left ${
-                            bookLength === opt.id
-                              ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100"
-                              : "border-slate-200 hover:border-slate-300 bg-white"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{opt.icon}</span>
-                            <span
-                              className={`text-sm font-black ${bookLength === opt.id ? "text-indigo-700" : "text-slate-700"}`}
-                            >
-                              {opt.label}
-                            </span>
-                          </div>
-                          <p
-                            className={`text-[10px] font-bold ${bookLength === opt.id ? "text-indigo-500" : "text-slate-400"}`}
+                      ].map((opt) => {
+                        // Check if user has access to this length
+                        const isDisabled =
+                          (opt.id === "medium" && plan === "free") ||
+                          (opt.id === "long" && plan !== "pro");
+                        const isLocked = opt.id === "medium" && plan === "free";
+                        const isProLocked = opt.id === "long" && plan !== "pro";
+
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => {
+                              if (isDisabled) {
+                                if (isLocked) {
+                                  toast.warning(
+                                    "Medium length requires Starter plan. Upgrade to access.",
+                                  );
+                                  setShowUpgradeModal(true);
+                                } else if (isProLocked) {
+                                  toast.warning(
+                                    "Long length requires Pro plan. Upgrade to access.",
+                                  );
+                                  setShowUpgradeModal(true);
+                                }
+                                return;
+                              }
+                              setBookLength(
+                                opt.id as "short" | "medium" | "long",
+                              );
+                              setChapterCount(opt.chapters);
+                            }}
+                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer text-left relative ${
+                              bookLength === opt.id && !isDisabled
+                                ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100"
+                                : isDisabled
+                                  ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
+                                  : "border-slate-200 hover:border-slate-300 bg-white"
+                            }`}
+                            disabled={isDisabled}
                           >
-                            {opt.pages}
-                          </p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">
-                            {opt.desc}
-                          </p>
-                        </button>
-                      ))}
+                            {isLocked && (
+                              <div className="absolute top-2 right-2">
+                                <span className="text-[8px] font-black text-amber-500">
+                                  LOCKED
+                                </span>
+                              </div>
+                            )}
+                            {isProLocked && (
+                              <div className="absolute top-2 right-2">
+                                <span className="text-[8px] font-black text-purple-500">
+                                  PRO
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg">{opt.icon}</span>
+                              <span
+                                className={`text-sm font-black ${bookLength === opt.id && !isDisabled ? "text-indigo-700" : isDisabled ? "text-slate-400" : "text-slate-700"}`}
+                              >
+                                {opt.label}
+                              </span>
+                            </div>
+                            <p
+                              className={`text-[10px] font-bold ${bookLength === opt.id && !isDisabled ? "text-indigo-500" : "text-slate-400"}`}
+                            >
+                              {opt.pages}
+                            </p>
+                            <p className="text-[9px] text-slate-400 mt-0.5">
+                              {opt.desc}
+                            </p>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* CHAPTERS SLIDER - NOW WITH LENGTH VISUALS */}
+                  {/* CHAPTERS SLIDER - CLEAN VERSION */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                         Chapters
                       </label>
                       <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
-                        {chapterCount}
+                        {plan === "free" ? 3 : chapterCount}
                       </span>
                     </div>
-                    <input
-                      type="range"
-                      min={4}
-                      max={12}
-                      value={chapterCount}
-                      onChange={(e) => setChapterCount(Number(e.target.value))}
-                      className="w-full accent-indigo-600 cursor-pointer"
-                    />
-                    <div className="flex justify-between text-xs text-slate-300 mt-1">
-                      <span>4 (Short)</span>
-                      <span>8 (Medium)</span>
-                      <span>12 (Long)</span>
+
+                    {/* Plan limit badge */}
+                    <div className="mb-3">
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          plan === "free"
+                            ? "bg-slate-100 text-slate-600"
+                            : plan === "starter"
+                              ? "bg-indigo-100 text-indigo-600"
+                              : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+                        }`}
+                      >
+                        {plan === "free"
+                          ? "Free: Max 3 chapters"
+                          : plan === "starter"
+                            ? "Starter: Max 6 chapters"
+                            : "Pro: Up to 12 chapters"}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+
+                    {/* Slider - Different for each plan */}
+                    {plan === "free" ? (
+                      // Free plan - static message, no slider
+                      <div className="w-full py-3 px-4 bg-slate-100 rounded-xl text-center text-sm font-medium text-slate-500">
+                        Free plan limited to 3 chapters
+                      </div>
+                    ) : plan === "starter" ? (
+                      // Starter plan - slider from 4 to 6
+                      <div>
+                        <input
+                          type="range"
+                          min={4}
+                          max={6}
+                          step={1}
+                          value={chapterCount}
+                          onChange={(e) =>
+                            setChapterCount(Number(e.target.value))
+                          }
+                          className="w-full accent-indigo-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-xs text-slate-400 mt-1">
+                          <span>4 chapters</span>
+                          <span>5 chapters</span>
+                          <span>6 chapters</span>
+                        </div>
+                      </div>
+                    ) : (
+                      // Pro plan - slider from 4 to 12
+                      <div>
+                        <input
+                          type="range"
+                          min={4}
+                          max={12}
+                          step={1}
+                          value={chapterCount}
+                          onChange={(e) =>
+                            setChapterCount(Number(e.target.value))
+                          }
+                          className="w-full accent-indigo-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-xs text-slate-400 mt-1">
+                          <span>4</span>
+                          <span>6</span>
+                          <span>8</span>
+                          <span>10</span>
+                          <span>12</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Progress bar and page estimate */}
+                    <div className="flex items-center gap-2 mt-3">
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all duration-300"
                           style={{
-                            width: `${((chapterCount - 4) / 8) * 100}%`,
+                            width:
+                              plan === "free"
+                                ? "100%"
+                                : plan === "starter"
+                                  ? `${((chapterCount - 4) / 2) * 100}%`
+                                  : `${((chapterCount - 4) / 8) * 100}%`,
                           }}
                         />
                       </div>
-                      <span className="text-[10px] text-slate-400 tabular-nums">
+                      <span className="text-[10px] text-slate-400 tabular-nums whitespace-nowrap">
                         ~
-                        {bookLength === "short"
-                          ? 12
-                          : bookLength === "medium"
-                            ? 24
-                            : 55}{" "}
+                        {(() => {
+                          if (plan === "free") return "10-12";
+                          if (bookLength === "short") return "12-15";
+                          if (bookLength === "medium") return "25-35";
+                          return "55-75"; // long
+                        })()}{" "}
                         pages
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">
+
+                    {/* Estimated read time - MORE ACCURATE */}
+                    <p className="text-xs text-slate-400 mt-2">
                       ⏱ Est.{" "}
-                      {Math.round(
-                        (chapterCount *
-                          (bookLength === "short"
-                            ? 4
+                      {(() => {
+                        // Base time per chapter based on book length
+                        const minutesPerChapter =
+                          bookLength === "short"
+                            ? 2
                             : bookLength === "medium"
-                              ? 6
-                              : 10) +
-                          20) /
-                          60,
-                      )}{" "}
-                      min read
+                              ? 3
+                              : 5;
+                        const totalMinutes =
+                          chapterCount * minutesPerChapter + 2; // +2 for intro/conclusion
+                        if (totalMinutes < 60) {
+                          return `${totalMinutes} min read`;
+                        } else {
+                          const hours = Math.floor(totalMinutes / 60);
+                          const mins = totalMinutes % 60;
+                          return mins > 0
+                            ? `${hours} hr ${mins} min read`
+                            : `${hours} hr read`;
+                        }
+                      })()}
                     </p>
+
+                    {/* Upgrade prompt for free users - shows only when limit is reached or near limit */}
+                    {plan === "free" && (
+                      <>
+                        {usage.remaining === 0 ? (
+                          // No generations left
+                          <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                            <p className="text-[10px] text-amber-700 font-medium">
+                              🔒 You've used all {usage.limit} free generations
+                              this month.{" "}
+                              <button
+                                onClick={() => setShowUpgradeModal(true)}
+                                className="underline font-bold"
+                              >
+                                Upgrade to Starter
+                              </button>{" "}
+                              to continue creating.
+                            </p>
+                          </div>
+                        ) : usage.remaining === 1 ? (
+                          // One generation left
+                          <div className="mt-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-[10px] text-blue-700 font-medium">
+                              ⚡ You have {usage.remaining} generation left this
+                              month.{" "}
+                              <button
+                                onClick={() => setShowUpgradeModal(true)}
+                                className="underline font-bold"
+                              >
+                                Upgrade to Starter
+                              </button>{" "}
+                              for 10 generations per month.
+                            </p>
+                          </div>
+                        ) : chapterCount > 3 ? (
+                          // User trying to select more than 3 chapters
+                          <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                            <p className="text-[10px] text-amber-700 font-medium">
+                              🔒 Free plan limited to 3 chapters.{" "}
+                              <button
+                                onClick={() => setShowUpgradeModal(true)}
+                                className="underline font-bold"
+                              >
+                                Upgrade to Starter
+                              </button>{" "}
+                              for up to 6 chapters.
+                            </p>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
+
+                  {/* Chapter Images Toggle - Only show for Starter/Pro plans */}
+                  {(plan === "starter" || plan === "pro") && (
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div>
+                        <p className="text-sm font-black text-slate-800">
+                          Include Chapter Images
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Add beautiful Unsplash images to each chapter
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeChapterImages}
+                          onChange={(e) =>
+                            setIncludeChapterImages(e.target.checked)
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                  )}
 
                   {/* TARGET PRICE
                   <div>
@@ -1266,14 +1546,11 @@ export default function ForgePage() {
               </button>
               <button
                 onClick={async () => {
-                  // Refresh usage data first
                   await refreshUsage();
-
-                  // Check if user can generate before starting
                   if (usage.remaining <= 0 && plan === "free") {
                     setShowUpgradeModal(true);
                     toast.warning(
-                      `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
+                      `You've used all ${usage.limit} free generations this month.`,
                     );
                     return;
                   }
@@ -1283,7 +1560,11 @@ export default function ForgePage() {
                 disabled={!customTitle}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
               >
-                <Sparkles className="w-4 h-4" /> Generate {chapterCount}{" "}
+                <Sparkles className="w-4 h-4" />
+                Generate{" "}
+                {plan === "free"
+                  ? Math.min(3, chapterCount)
+                  : chapterCount}{" "}
                 Chapters
               </button>
             </div>
@@ -1292,10 +1573,16 @@ export default function ForgePage() {
 
         {/* ── STEP 4: Generating ── */}
         {step === 4 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center">
+          <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center">
+            {" "}
             <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Zap className="w-10 h-10 text-indigo-600 animate-pulse" />
             </div>
+            {plan === "pro" && (
+              <div className="absolute -top-2 -right-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full">
+                PRIORITY
+              </div>
+            )}
             <h2 className="text-xl font-black text-slate-900 mb-2 tracking-tight">
               Forging Your Product
             </h2>
@@ -1303,10 +1590,20 @@ export default function ForgePage() {
               Writing your {chapterCount}-chapter guide with AI
             </p>
             <p className="text-xs text-slate-300 mb-8">
-              Est. {Math.round((chapterCount * 6 + 20) / 60)} min — don't close
-              this tab
+              Est.{" "}
+              {(() => {
+                // AI generation time - more accurate
+                const secondsPerChapter =
+                  bookLength === "short"
+                    ? 15
+                    : bookLength === "medium"
+                      ? 25
+                      : 40;
+                const totalSeconds = chapterCount * secondsPerChapter + 10;
+                const minutes = Math.ceil(totalSeconds / 60);
+                return `${minutes} min — don't close this tab`;
+              })()}
             </p>
-
             <div className="max-w-sm mx-auto space-y-2 mb-8 max-h-72 overflow-y-auto pr-1">
               {genSteps.map((s, i) => (
                 <div
@@ -1353,7 +1650,6 @@ export default function ForgePage() {
                 </div>
               ))}
             </div>
-
             <div className="max-w-sm mx-auto">
               <div className="flex justify-between text-xs text-slate-400 mb-1">
                 <span>Progress</span>
@@ -1366,7 +1662,6 @@ export default function ForgePage() {
                 />
               </div>
             </div>
-
             {genError && (
               <div className="bg-red-50 border border-red-200 text-red-500 rounded-xl p-4 text-sm mt-6">
                 {genError}
