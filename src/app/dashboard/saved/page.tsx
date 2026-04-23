@@ -1,3 +1,4 @@
+// app/dashboard/saved/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -5,9 +6,11 @@ import Sidebar from '@/components/Sidebar'
 import { createClient } from '@/lib/supabase/client'
 import {
   TrendingUp, Sword, DollarSign, Flame, Trash2, Zap,
-  BookMarked, ArrowRight, Info, Sparkles
+  BookMarked, ArrowRight, Info, Sparkles, Eye, Download,
+  RefreshCw, AlertCircle, CheckCircle2, Clock, Target, TrendingDown
 } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 interface SavedIdea {
   id: string
@@ -22,6 +25,8 @@ interface SavedIdea {
   trend: string
   niche: string
   created_at: string
+  sales_rationale?: string
+  target_platform?: string
 }
 
 function ForgeScoreRing({ score }: { score: number }) {
@@ -29,6 +34,7 @@ function ForgeScoreRing({ score }: { score: number }) {
   const circ = 2 * Math.PI * r
   const dash = (score / 100) * circ
   const color = score >= 75 ? '#4f46e5' : score >= 50 ? '#7c3aed' : '#94a3b8'
+  const label = score >= 75 ? 'High Potential' : score >= 50 ? 'Medium Potential' : 'Low Priority'
   return (
     <div className="relative w-11 h-11 shrink-0">
       <svg className="w-11 h-11 -rotate-90" viewBox="0 0 44 44">
@@ -52,17 +58,31 @@ function ScoreBar({ score, label, icon }: { score: number; label: string; icon: 
     score >= 75 ? 'from-indigo-500 to-indigo-600' :
     score >= 50 ? 'from-violet-400 to-indigo-500' :
     'from-slate-300 to-slate-400'
+  
+  let recommendation = ''
+  if (label === 'Demand' && score >= 75) recommendation = '🔥 High demand'
+  if (label === 'Demand' && score < 50) recommendation = '⚠️ Low demand'
+  if (label === 'Competition' && score <= 40) recommendation = '✅ Low competition'
+  if (label === 'Competition' && score > 70) recommendation = '⚠️ High competition'
+  if (label === 'Monetization' && score >= 75) recommendation = '💰 Strong monetization'
+  if (label === 'Virality' && score >= 75) recommendation = '📈 Viral potential'
+  
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-slate-400 shrink-0 w-4">{icon}</span>
-      <span className="text-[11px] font-semibold text-slate-500 w-24 shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-700`}
-          style={{ width: `${score}%` }}
-        />
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-3">
+        <span className="text-slate-400 shrink-0 w-4">{icon}</span>
+        <span className="text-[11px] font-semibold text-slate-500 w-24 shrink-0">{label}</span>
+        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-700`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+        <span className="text-[11px] font-bold text-slate-600 w-7 text-right tabular-nums">{score}</span>
       </div>
-      <span className="text-[11px] font-bold text-slate-600 w-7 text-right tabular-nums">{score}</span>
+      {recommendation && (
+        <p className="text-[9px] text-slate-400 ml-7">{recommendation}</p>
+      )}
     </div>
   )
 }
@@ -124,63 +144,83 @@ export default function SavedIdeasPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [forgingId, setForgingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
+  const [sortBy, setSortBy] = useState<'date' | 'score'>('date')
   const supabase = createClient()
 
   useEffect(() => { fetchSaved() }, [])
 
   const fetchSaved = async () => {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setLoading(false)
+      return
+    }
+    
     const { data, error } = await supabase
       .from('saved_ideas')
       .select('*')
-      .order('created_at', { ascending: false })
-    if (!error) setIdeas(data || [])
+      .eq('user_id', user.id)
+      .order(sortBy === 'date' ? 'created_at' : 'forge_score', { ascending: sortBy === 'date' ? false : false })
+    if (!error && data) setIdeas(data)
     setLoading(false)
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, title: string) => {
     setDeletingId(id)
     const { error } = await supabase.from('saved_ideas').delete().eq('id', id)
-    if (!error) setIdeas(prev => prev.filter(i => i.id !== id))
+    if (!error) {
+      setIdeas(prev => prev.filter(i => i.id !== id))
+      toast.success(`"${title}" removed from saved ideas`)
+    } else {
+      toast.error('Failed to delete idea')
+    }
     setDeletingId(null)
   }
 
   const handleForge = async (idea: SavedIdea) => {
     setForgingId(idea.id)
     setError('')
+    
+    const toastId = toast.loading(`Forging "${idea.title}"...`)
+    
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idea: {
-            title: idea.title,
-            angle: idea.angle,
-            targetAudience: idea.target_audience,
-          }
-        }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-
-      const pdfRes = await fetch('/api/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: data.content, title: idea.title }),
-      })
-      if (!pdfRes.ok) throw new Error('PDF generation failed')
-      const blob = await pdfRes.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${idea.title.replace(/\s+/g, '_')}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      setError('Failed to forge PDF. Try again.')
+      // Store idea in sessionStorage for the forge page
+      sessionStorage.setItem('forgeIdea', JSON.stringify({
+        title: idea.title,
+        angle: idea.angle,
+        targetAudience: idea.target_audience,
+        niche: idea.niche,
+        forgeScore: idea.forge_score,
+        trend: idea.trend
+      }))
+      
+      // Redirect to forge page
+      window.location.href = '/dashboard/forge'
+      
+      toast.success('Redirecting to forge...', { id: toastId })
+    } catch (err) {
+      toast.error('Failed to start forging', { id: toastId })
+      setError('Failed to start forging. Please try again.')
     } finally {
       setForgingId(null)
     }
+  }
+
+  // Filter ideas based on forge score
+  const filteredIdeas = ideas.filter(idea => {
+    if (filter === 'all') return true
+    if (filter === 'high') return idea.forge_score >= 75
+    if (filter === 'medium') return idea.forge_score >= 50 && idea.forge_score < 75
+    if (filter === 'low') return idea.forge_score < 50
+    return true
+  })
+
+  const stats = {
+    total: ideas.length,
+    highPotential: ideas.filter(i => i.forge_score >= 75).length,
+    avgScore: ideas.length > 0 ? Math.round(ideas.reduce((a, b) => a + b.forge_score, 0) / ideas.length) : 0
   }
 
   return (
@@ -188,7 +228,7 @@ export default function SavedIdeasPage() {
       <Sidebar />
       <main className="flex-1 md:ml-60 px-4 md:px-8 pt-20 md:pt-10 pb-16">
 
-        {/* ── Top bar ── */}
+        {/* Top bar */}
         <div className="hidden md:flex items-center justify-between mb-8 pt-2">
           <div className="text-xs font-semibold text-slate-400">
             Dashboard <span className="text-slate-300 mx-1.5">/</span>
@@ -200,8 +240,8 @@ export default function SavedIdeasPage() {
           </div>
         </div>
 
-        {/* ── Header ── */}
-        <div className="flex items-start justify-between mb-7 gap-4">
+        {/* Header with Stats */}
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-7">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <BookMarked className="w-4 h-4 text-indigo-500" />
@@ -212,15 +252,85 @@ export default function SavedIdeasPage() {
               Your saved product ideas, ready to forge anytime
             </p>
           </div>
-          <Link
-            href="/dashboard/generate"
-            className="shrink-0 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 rounded-xl text-xs transition shadow-md shadow-indigo-200 cursor-pointer group"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Generate More</span>
-            <span className="sm:hidden">+</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform hidden sm:inline" />
-          </Link>
+          
+          {/* Stats Cards */}
+          <div className="flex gap-3">
+            <div className="bg-white rounded-xl px-4 py-2 border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Total</p>
+              <p className="text-xl font-black text-slate-800">{stats.total}</p>
+            </div>
+            <div className="bg-white rounded-xl px-4 py-2 border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase">High Potential</p>
+              <p className="text-xl font-black text-emerald-600">{stats.highPotential}</p>
+            </div>
+            <div className="bg-white rounded-xl px-4 py-2 border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Score</p>
+              <p className="text-xl font-black text-indigo-600">{stats.avgScore}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters and Sort */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              All Ideas
+            </button>
+            <button
+              onClick={() => setFilter('high')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                filter === 'high' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              🔥 High (75+)
+            </button>
+            <button
+              onClick={() => setFilter('medium')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                filter === 'medium' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              📈 Medium (50-74)
+            </button>
+            <button
+              onClick={() => setFilter('low')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                filter === 'low' ? 'bg-slate-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              ⚠️ Low (&lt;50)
+            </button>
+          </div>
+          
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSortBy('date')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                sortBy === 'date' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              Latest First
+            </button>
+            <button
+              onClick={() => setSortBy('score')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                sortBy === 'score' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              Highest Score
+            </button>
+            <button
+              onClick={fetchSaved}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Error */}
@@ -231,15 +341,15 @@ export default function SavedIdeasPage() {
           </div>
         )}
 
-        {/* ── Loading skeletons ── */}
+        {/* Loading skeletons */}
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {[1,2,3,4].map(i => <SkeletonCard key={i} />)}
           </div>
         )}
 
-        {/* ── Empty state ── */}
-        {!loading && ideas.length === 0 && (
+        {/* Empty state */}
+        {!loading && filteredIdeas.length === 0 && ideas.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 md:p-20 text-center shadow-sm">
             <div className="w-16 h-16 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
               <BookMarked className="w-7 h-7 text-indigo-400" />
@@ -259,13 +369,29 @@ export default function SavedIdeasPage() {
           </div>
         )}
 
-        {/* ── Ideas grid ── */}
-        {!loading && ideas.length > 0 && (
+        {/* No results after filter */}
+        {!loading && filteredIdeas.length === 0 && ideas.length > 0 && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <AlertCircle className="w-7 h-7 text-slate-400" />
+            </div>
+            <h3 className="font-black text-slate-800 text-lg mb-2 tracking-tight">No ideas match this filter</h3>
+            <p className="text-slate-400 text-sm mb-5">Try changing your filter criteria</p>
+            <button
+              onClick={() => setFilter('all')}
+              className="text-indigo-600 font-bold text-sm hover:text-indigo-700"
+            >
+              View all ideas →
+            </button>
+          </div>
+        )}
+
+        {/* Ideas grid */}
+        {!loading && filteredIdeas.length > 0 && (
           <>
-            {/* Results bar */}
             <div className="flex items-center justify-between mb-5">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                {ideas.length} saved idea{ideas.length !== 1 ? 's' : ''}
+                {filteredIdeas.length} saved idea{filteredIdeas.length !== 1 ? 's' : ''}
               </p>
               <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-full px-3 py-1.5">
                 <BookMarked className="w-3 h-3 text-indigo-400" />
@@ -274,7 +400,7 @@ export default function SavedIdeasPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {ideas.map(idea => (
+              {filteredIdeas.map(idea => (
                 <div
                   key={idea.id}
                   className="group bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-50 transition-all duration-200 flex flex-col shadow-sm"
@@ -286,14 +412,14 @@ export default function SavedIdeasPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-2">
                           <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full uppercase tracking-wide">
-                            {idea.niche}
+                            {idea.niche || 'General'}
                           </span>
                           <TrendPill trend={idea.trend} />
                         </div>
                         <h3 className="text-sm font-black text-slate-900 leading-snug">{idea.title}</h3>
                       </div>
                       <button
-                        onClick={() => handleDelete(idea.id)}
+                        onClick={() => handleDelete(idea.id, idea.title)}
                         disabled={deletingId === idea.id}
                         title="Delete idea"
                         className="shrink-0 p-2 rounded-xl text-slate-300 hover:text-red-400 hover:bg-red-50 transition-all cursor-pointer disabled:opacity-40 mt-0.5"
@@ -307,14 +433,21 @@ export default function SavedIdeasPage() {
 
                     {/* Angle + audience */}
                     <p className="text-slate-500 text-xs leading-relaxed mb-1">{idea.angle}</p>
-                    <p className="text-slate-400 text-xs mb-4 font-medium">👤 {idea.target_audience}</p>
+                    <div className="flex items-center gap-2 mb-4">
+                      <p className="text-slate-400 text-xs font-medium">👤 {idea.target_audience}</p>
+                      {idea.forge_score >= 75 && (
+                        <span className="text-[9px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold">
+                          High Potential
+                        </span>
+                      )}
+                    </div>
 
                     {/* Score bars */}
                     <div className="space-y-2.5 p-3.5 bg-slate-50/80 rounded-xl border border-slate-100 mb-4">
-                      <ScoreBar score={idea.demand_score}       label="Demand"       icon={<TrendingUp className="w-3.5 h-3.5" />} />
-                      <ScoreBar score={idea.competition_score}  label="Competition"  icon={<Sword className="w-3.5 h-3.5" />} />
+                      <ScoreBar score={idea.demand_score} label="Demand" icon={<TrendingUp className="w-3.5 h-3.5" />} />
+                      <ScoreBar score={100 - idea.competition_score} label="Opportunity" icon={<Target className="w-3.5 h-3.5" />} />
                       <ScoreBar score={idea.monetization_score} label="Monetization" icon={<DollarSign className="w-3.5 h-3.5" />} />
-                      <ScoreBar score={idea.virality_score}     label="Virality"     icon={<Flame className="w-3.5 h-3.5" />} />
+                      <ScoreBar score={idea.virality_score} label="Virality" icon={<Flame className="w-3.5 h-3.5" />} />
                     </div>
 
                     {/* Footer */}
@@ -323,7 +456,8 @@ export default function SavedIdeasPage() {
                         <ForgeScoreRing score={idea.forge_score} />
                         <div>
                           <p className="text-xs font-black text-slate-700">Forge Score</p>
-                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                          <p className="text-[10px] text-slate-400 font-medium mt-0.5 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
                             {new Date(idea.created_at).toLocaleDateString('en-US', {
                               month: 'short', day: 'numeric', year: 'numeric'
                             })}
@@ -333,7 +467,7 @@ export default function SavedIdeasPage() {
                       <button
                         onClick={() => handleForge(idea)}
                         disabled={forgingId === idea.id}
-                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm shadow-indigo-200 group-hover:shadow-indigo-300"
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm shadow-indigo-200"
                       >
                         {forgingId === idea.id ? (
                           <>

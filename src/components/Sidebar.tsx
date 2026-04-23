@@ -2,7 +2,8 @@
 
 import {
   Zap, LayoutDashboard, Lightbulb, BookMarked,
-  LogOut, Menu, X, ChevronRight, Rocket, ArrowRight
+  LogOut, Menu, X, ChevronRight, Rocket, ArrowRight,
+  Library
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -13,6 +14,7 @@ import Image from 'next/image'
 const links = [
   { id: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, desc: 'Overview & stats' },
   { id: 'generate', label: 'Generate Ideas', href: '/dashboard/generate', icon: Lightbulb, desc: 'AI trend engine' },
+  { id: 'library', label: 'Library', href: '/dashboard/library', icon: Library, desc: 'Generated ebooks' },
   { id: 'saved', label: 'Saved Ideas', href: '/dashboard/saved', icon: BookMarked, desc: 'Your forge queue' },
 ]
 

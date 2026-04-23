@@ -1,618 +1,864 @@
-import { NextResponse } from 'next/server'
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+// app/api/pdf/route.ts - FIXED chapter titles and removed underline
+import { NextResponse } from "next/server";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
-// ── CLEAN TEXT ──────────────────────────────────────────
 const clean = (t: string) =>
-  (t || '')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/#+\s?/g, '')
-    .replace(/\t/g, ' ').replace(/\r/g, '')
-    .replace(/\u00A0/g, ' ').replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/[^\x00-\x7F]/g, (c: string) => ({
-      '\u2018': "'", '\u2019': "'", '\u201C': '"', '\u201D': '"',
-      '\u2013': '-', '\u2014': '--', '\u2026': '...', '\u2022': '-',
-      '\u00B7': '-', '\u00E9': 'e', '\u00E8': 'e', '\u00EA': 'e',
-      '\u00E0': 'a', '\u00E2': 'a', '\u00F4': 'o', '\u00FB': 'u',
-      '\u00FC': 'u', '\u00E7': 'c', '\u00EE': 'i', '\u00EF': 'i',
-      '\u00F1': 'n', '\u00E1': 'a', '\u00ED': 'i', '\u00F3': 'o',
-      '\u00FA': 'u',
-    } as Record<string, string>)[c] || '')
-    .replace(/\s+/g, ' ').trim()
+  (t || "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/#+\s?/g, "")
+    .replace(/\t/g, " ")
+    .replace(/\r/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-// ── WRAP TEXT INTO LINES ─────────────────────────────────
-function wrapLines(text: string, font: any, size: number, maxW: number): string[] {
-  const out: string[] = []
-  const paragraphs = clean(text).split('\n')
-  for (const para of paragraphs) {
-    const trimmed = para.trim()
-    if (!trimmed) { out.push(''); continue }
-    const words = trimmed.split(' ').filter(Boolean)
-    let line = ''
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w
-      try {
-        if (font.widthOfTextAtSize(test, size) <= maxW) { line = test }
-        else { if (line) out.push(line); line = w }
-      } catch { line = w }
+function wrapText(
+  text: string,
+  font: any,
+  size: number,
+  maxW: number,
+): string[] {
+  if (!text) return [];
+  const words = clean(text).split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    try {
+      const width = font.widthOfTextAtSize(test, size);
+      if (width <= maxW) {
+        line = test;
+      } else {
+        if (line) lines.push(line);
+        line = w;
+      }
+    } catch {
+      line = w;
     }
-    if (line) out.push(line)
   }
-  return out
+  if (line) lines.push(line);
+  return lines;
 }
 
 function splitParagraphs(text: string): string[] {
-  const cleaned = clean(text)
-  
-  // First try splitting on newlines
-  const byNewline = cleaned.split(/\n+/).map(p => p.trim()).filter(p => p.length > 15)
-  if (byNewline.length > 1) return byNewline
-
-  // No newlines — split on sentence groups (every ~3 sentences = 1 paragraph)
-  const sentences = cleaned.match(/[^.!?]+[.!?]+/g) || [cleaned]
-  const paras: string[] = []
-  let current = ''
-  let count = 0
+  if (!text) return [];
+  const c = clean(text);
+  const byDouble = c
+    .split(/\n\n+/)
+    .map((p) => p.replace(/\n/g, " ").trim())
+    .filter((p) => p.length > 20);
+  if (byDouble.length > 1) return byDouble;
+  const bySingle = c
+    .split(/\n/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 20);
+  if (bySingle.length > 1) return bySingle;
+  const sentences = c.match(/[^.!?]+[.!?]+["']?\s*/g) || [c];
+  const paras: string[] = [];
+  let current = "",
+    count = 0;
   for (const s of sentences) {
-    current += s.trim() + ' '
-    count++
-    if (count >= 3) {
-      paras.push(current.trim())
-      current = ''
-      count = 0
+    current += s;
+    count++;
+    if (count >= 4) {
+      paras.push(current.trim());
+      current = "";
+      count = 0;
     }
   }
-  if (current.trim()) paras.push(current.trim())
-  return paras.filter(p => p.length > 15)
+  if (current.trim().length > 20) paras.push(current.trim());
+  return paras.length > 0 ? paras : [c.slice(0, 500)];
 }
 
-// ── SAFE IMAGE EMBED ─────────────────────────────────────
-async function safeEmbed(doc: PDFDocument, url: string) {
+async function embedImg(doc: PDFDocument, url: string) {
+  if (!url) return null;
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10000)
-    const res = await fetch(url, { signal: controller.signal })
-    clearTimeout(timeout)
-    if (!res.ok) return null
-    const buf = await res.arrayBuffer()
-    const jpg = await doc.embedJpg(buf).catch(() => null)
-    if (jpg) return jpg
-    return await doc.embedPng(buf).catch(() => null)
-  } catch { return null }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    try {
+      return await doc.embedJpg(buffer);
+    } catch {
+      return await doc.embedPng(buffer);
+    }
+  } catch (error) {
+    console.error("Image embed error:", error);
+    return null;
+  }
 }
 
-// ── FETCH UNSPLASH IMAGE ─────────────────────────────────
-async function fetchUnsplashImage(query: string): Promise<string | null> {
-  try {
-    const key = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY
-    if (!key) return null
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    const res = await fetch(
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`,
-      { headers: { Authorization: `Client-ID ${key}` }, signal: controller.signal }
-    )
-    clearTimeout(timeout)
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.results?.[0]?.urls?.regular || null
-  } catch { return null }
-}
+const THEMES: Record<string, [number, number, number]> = {
+  indigo: [0.3, 0.16, 0.82],
+  violet: [0.5, 0.18, 0.9],
+  rose: [0.88, 0.18, 0.32],
+  emerald: [0.05, 0.6, 0.38],
+  amber: [0.86, 0.56, 0.06],
+  slate: [0.22, 0.28, 0.36],
+  cyan: [0.05, 0.6, 0.75],
+  orange: [0.9, 0.4, 0.06],
+};
 
 export async function POST(req: Request) {
-  const { content, title, coverImageUrl } = await req.json()
+  try {
+    const {
+      content,
+      title,
+      coverImageUrl,
+      theme = "indigo",
+      template = "premium",
+    } = await req.json();
 
-  const doc  = await PDFDocument.create()
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const reg  = await doc.embedFont(StandardFonts.Helvetica)
-  const ital = await doc.embedFont(StandardFonts.HelveticaOblique)
+    console.log("📄 Premium PDF generation started for:", title);
 
-  // Page dimensions
-  const W = 595, H = 842
-  const ML = 68, MR = 68          // wider margins = more readable
-  const TW = W - ML - MR          // text width = 459
-  const BOTTOM = 65               // footer clearance
+    const doc = await PDFDocument.create();
+    const BOLD = await doc.embedFont(StandardFonts.HelveticaBold);
+    const REG = await doc.embedFont(StandardFonts.Helvetica);
+    const ITAL = await doc.embedFont(StandardFonts.HelveticaOblique);
 
-  // Typography scale
-  const T = {
-    body:        { size: 11, lh: 19 },   // main body text
-    bodyLead:    { size: 12, lh: 21 },   // first paragraph of section
-    caption:     { size: 9,  lh: 14 },
-    label:       { size: 8,  lh: 12 },
-    chTitle:     { size: 20, lh: 28 },   // chapter heading on page
-    sectionHead: { size: 13, lh: 20 },   // section labels
-    tip:         { size: 10, lh: 16 },
-    toc:         { size: 11, lh: 18 },
-    introTitle:  { size: 16, lh: 24 },
-    coverTitle:  { size: 30, lh: 40 },
-    coverSub:    { size: 12, lh: 18 },
-  }
+    const PAGE_W = 595;
+    const PAGE_H = 842;
+    const LEFT_MARGIN = 56;
+    const RIGHT_MARGIN = 56;
+    const TEXT_WIDTH = PAGE_W - LEFT_MARGIN - RIGHT_MARGIN;
+    const FOOTER_Y = 48;
 
-  // Paragraph spacing (after each paragraph block)
-  const PARA_GAP = 14
+    const [ar, ag, ab] = THEMES[theme] || THEMES.indigo;
+    const ACCENT = rgb(ar, ag, ab);
+    const DARK = rgb(0.08, 0.08, 0.12);
+    const GRAY_LIGHT = rgb(0.96, 0.96, 0.97);
+    const GRAY_MID = rgb(0.5, 0.5, 0.55);
+    const PAPER = rgb(0.99, 0.98, 0.95);
 
-  // Color palette
-  const C = {
-    ink:    rgb(0.10, 0.10, 0.13),   // near-black body text
-    body:   rgb(0.22, 0.22, 0.26),   // slightly lighter body
-    muted:  rgb(0.48, 0.48, 0.52),   // metadata, captions
-    faint:  rgb(0.68, 0.68, 0.72),   // very light labels
-    accent: rgb(0.30, 0.16, 0.82),   // indigo brand
-    a2:     rgb(0.18, 0.10, 0.68),   // darker indigo
-    white:  rgb(1, 1, 1),
-    tint:   rgb(0.96, 0.94, 1.00),   // soft indigo tint
-    tint2:  rgb(0.92, 0.89, 0.98),   // slightly deeper tint
-    dark:   rgb(0.05, 0.04, 0.14),   // near-black bg
-    gold:   rgb(0.94, 0.74, 0.18),
-    line:   rgb(0.88, 0.86, 0.94),   // divider lines
-    rule:   rgb(0.92, 0.91, 0.95),   // light rule
-  }
+    let pageNumber = 0;
 
-  let pg = 0
-  const addPage = () => {
-    pg++
-    return { page: doc.addPage([W, H]), y: H - 60 }
-  }
+    const addPage = () => {
+      pageNumber++;
+      const newPage = doc.addPage([PAGE_W, PAGE_H]);
+      newPage.drawRectangle({
+        x: 0,
+        y: 0,
+        width: PAGE_W,
+        height: PAGE_H,
+        color: PAPER,
+      });
+      return { page: newPage, y: PAGE_H - 70 };
+    };
 
-  const drawFooter = (page: any, label: string) => {
-    page.drawLine({
-      start: { x: ML, y: 46 },
-      end: { x: W - MR, y: 46 },
+    const drawFooter = (page: any, section: string) => {
+      page.drawLine({
+        start: { x: LEFT_MARGIN, y: 42 },
+        end: { x: PAGE_W - RIGHT_MARGIN, y: 42 },
+        thickness: 0.3,
+        color: rgb(0.85, 0.85, 0.88),
+      });
+      page.drawText(section.slice(0, 35), {
+        x: LEFT_MARGIN,
+        y: 28,
+        size: 8,
+        font: REG,
+        color: GRAY_MID,
+      });
+      page.drawText(`${pageNumber}`, {
+        x: PAGE_W - RIGHT_MARGIN - 12,
+        y: 28,
+        size: 8,
+        font: REG,
+        color: GRAY_MID,
+      });
+    };
+
+    const writeParagraph = async (
+      pageObj: any,
+      yPos: number,
+      text: string,
+      font: any,
+      size: number,
+      color: any,
+      lineHeight: number,
+      section: string,
+      indent = 0,
+    ): Promise<{ page: any; y: number }> => {
+      if (!text || yPos === undefined || isNaN(yPos)) {
+        return { page: pageObj, y: yPos || PAGE_H - 100 };
+      }
+
+      let currentPage = pageObj;
+      let currentY = yPos;
+      const lines = wrapText(text, font, size, TEXT_WIDTH - indent);
+
+      for (const line of lines) {
+        if (currentY < FOOTER_Y + lineHeight + 10) {
+          drawFooter(currentPage, section);
+          const newPage = addPage();
+          currentPage = newPage.page;
+          currentY = newPage.y;
+        }
+
+        if (isNaN(currentY)) currentY = PAGE_H - 100;
+
+        currentPage.drawText(line, {
+          x: LEFT_MARGIN + indent,
+          y: currentY,
+          size: size,
+          font: font,
+          color: color,
+        });
+        currentY -= lineHeight;
+      }
+      return { page: currentPage, y: currentY };
+    };
+
+    // ========== COVER PAGE ==========
+    const coverPage = doc.addPage([PAGE_W, PAGE_H]);
+    pageNumber++;
+
+    let coverImg = null;
+    if (coverImageUrl) {
+      coverImg = await embedImg(doc, coverImageUrl);
+    }
+
+    if (coverImg) {
+      const { width: iw, height: ih } = coverImg.scale(1);
+      const scale = Math.max(PAGE_W / iw, PAGE_H / ih);
+      coverPage.drawImage(coverImg, {
+        x: (PAGE_W - iw * scale) / 2,
+        y: (PAGE_H - ih * scale) / 2,
+        width: iw * scale,
+        height: ih * scale,
+        opacity: 0.4,
+      });
+    }
+
+    coverPage.drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_W,
+      height: PAGE_H,
+      color: DARK,
+      opacity: 0.65,
+    });
+    coverPage.drawRectangle({
+      x: 0,
+      y: PAGE_H - 4,
+      width: PAGE_W,
+      height: 4,
+      color: ACCENT,
+    });
+    coverPage.drawText("DIGIFORGE", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 35,
+      size: 9,
+      font: BOLD,
+      color: ACCENT,
+    });
+
+    const titleClean = clean(content?.title || title);
+    const titleWords = titleClean.split(" ");
+    let titleLine = "";
+    const titleLines: string[] = [];
+    const titleFontSize =
+      titleClean.length > 50 ? 28 : titleClean.length > 35 ? 34 : 40;
+
+    for (const w of titleWords) {
+      const test = titleLine ? `${titleLine} ${w}` : w;
+      try {
+        if (BOLD.widthOfTextAtSize(test, titleFontSize) <= TEXT_WIDTH) {
+          titleLine = test;
+        } else {
+          if (titleLine) titleLines.push(titleLine);
+          titleLine = w;
+        }
+      } catch {
+        titleLine = w;
+      }
+    }
+    if (titleLine) titleLines.push(titleLine);
+
+    const titleBlockHeight = titleLines.length * (titleFontSize + 8);
+    let titleY = PAGE_H / 2 + titleBlockHeight / 2 + 30;
+
+    for (const line of titleLines) {
+      coverPage.drawText(line, {
+        x: LEFT_MARGIN,
+        y: titleY,
+        size: titleFontSize,
+        font: BOLD,
+        color: rgb(1, 1, 1),
+      });
+      titleY -= titleFontSize + 8;
+    }
+
+    if (content?.subtitle) {
+      const subLines = wrapText(clean(content.subtitle), REG, 12, TEXT_WIDTH);
+      let subY = titleY - 25;
+      for (const line of subLines) {
+        coverPage.drawText(line, {
+          x: LEFT_MARGIN,
+          y: subY,
+          size: 12,
+          font: REG,
+          color: rgb(0.8, 0.8, 0.85),
+        });
+        subY -= 18;
+      }
+    }
+
+    coverPage.drawRectangle({
+      x: 0,
+      y: 80,
+      width: PAGE_W,
+      height: 80,
+      color: ACCENT,
+      opacity: 0.1,
+    });
+    coverPage.drawText(
+      `${content?.chapters?.length || 6} CHAPTER COMPLETE GUIDE`,
+      {
+        x: LEFT_MARGIN,
+        y: 50,
+        size: 9,
+        font: BOLD,
+        color: ACCENT,
+      },
+    );
+    coverPage.drawText(new Date().getFullYear().toString(), {
+      x: PAGE_W - RIGHT_MARGIN - 30,
+      y: 50,
+      size: 9,
+      font: REG,
+      color: GRAY_MID,
+    });
+
+    drawFooter(coverPage, "Cover");
+
+    // ========== TABLE OF CONTENTS ==========
+    let { page: tocPage, y: tocY } = addPage();
+
+    tocPage.drawRectangle({
+      x: 0,
+      y: PAGE_H - 80,
+      width: PAGE_W,
+      height: 80,
+      color: ACCENT,
+      opacity: 0.05,
+    });
+    tocPage.drawText("CONTENTS", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 42,
+      size: 24,
+      font: BOLD,
+      color: DARK,
+    });
+    tocPage.drawText("What's inside this guide", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 65,
+      size: 10,
+      font: REG,
+      color: GRAY_MID,
+    });
+    tocPage.drawRectangle({
+      x: LEFT_MARGIN,
+      y: PAGE_H - 75,
+      width: 50,
+      height: 3,
+      color: ACCENT,
+    });
+
+    tocY = PAGE_H - 115;
+
+    tocPage.drawText("Section", {
+      x: LEFT_MARGIN,
+      y: tocY,
+      size: 9,
+      font: BOLD,
+      color: ACCENT,
+    });
+    tocPage.drawText("Page", {
+      x: PAGE_W - RIGHT_MARGIN - 25,
+      y: tocY,
+      size: 9,
+      font: BOLD,
+      color: ACCENT,
+    });
+    tocY -= 20;
+    
+    tocPage.drawLine({
+      start: { x: LEFT_MARGIN, y: tocY + 8 },
+      end: { x: PAGE_W - RIGHT_MARGIN, y: tocY + 8 },
       thickness: 0.5,
-      color: C.rule,
-    })
-    page.drawText('DigiForgeAI', { x: ML, y: 30, size: 7.5, font: bold, color: C.faint })
-    page.drawText(clean(label).slice(0, 52), { x: ML + 68, y: 30, size: 7.5, font: reg, color: C.faint })
-    page.drawText(`${pg}`, { x: W - MR - 12, y: 30, size: 7.5, font: reg, color: C.faint })
-  }
+      color: ACCENT,
+      opacity: 0.5,
+    });
+    tocY -= 15;
 
-  // ── Write a single paragraph, returns new {page, y} ──
-  const writeParagraph = (
-    initPage: any,
-    initY: number,
-    text: string,
-    font: any,
-    size: number,
-    color: any,
-    lh: number,
-    label: string,
-    indent = 0,
-  ): { page: any; y: number } => {
-    let page = initPage, y = initY
-    const lines = wrapLines(text, font, size, TW - indent)
-    for (const line of lines) {
-      if (y < BOTTOM + lh + 10) {
-        drawFooter(page, label)
-        ;({ page, y } = addPage())
+    const tocItems = [
+      { title: "Introduction", page: 1 },
+      ...(content?.chapters?.map((ch: any, i: number) => ({
+        title: ch?.title || `Chapter ${i + 1}`,
+        page: i + 2,
+      })) || []),
+      { title: "Conclusion", page: (content?.chapters?.length || 0) + 2 },
+    ];
+
+    for (const item of tocItems) {
+      if (tocY < 60) {
+        drawFooter(tocPage, "Contents");
+        const newPage = addPage();
+        tocPage = newPage.page;
+        tocY = newPage.y;
       }
-      page.drawText(line, { x: ML + indent, y, size, font, color })
-      y -= lh
-    }
-    return { page, y }
-  }
 
-  // ── Write a full block of paragraphs ──
-  const writeBlock = (
-    initPage: any,
-    initY: number,
-    text: string,
-    font: any,
-    size: number,
-    color: any,
-    lh: number,
-    label: string,
-    isLead = false,   // first paragraph gets slightly larger treatment
-  ): { page: any; y: number } => {
-    let page = initPage, y = initY
-    const paras = splitParagraphs(text)
-
-    for (let i = 0; i < paras.length; i++) {
-      const useFont  = (isLead && i === 0) ? bold : font
-      const useSize  = (isLead && i === 0) ? T.bodyLead.size : size
-      const useLh    = (isLead && i === 0) ? T.bodyLead.lh : lh
-      const useColor = (isLead && i === 0) ? C.ink : color
-
-      const result = writeParagraph(page, y, paras[i], useFont, useSize, useColor, useLh, label)
-      page = result.page
-      y = result.y - PARA_GAP   // paragraph gap
-    }
-    return { page, y }
-  }
-
-  // ════════════════════════════════════════
-  // COVER PAGE
-  // ════════════════════════════════════════
-  const cover = doc.addPage([W, H]); pg++
-  cover.drawRectangle({ x: 0, y: 0, width: W, height: H, color: C.dark })
-
-  if (coverImageUrl) {
-    const img = await safeEmbed(doc, coverImageUrl)
-    if (img) {
-      cover.drawImage(img, { x: 0, y: H * 0.38, width: W, height: H * 0.62 })
-      cover.drawRectangle({ x: 0, y: H * 0.38, width: W, height: H * 0.62, color: rgb(0,0,0), opacity: 0.45 })
-    }
-  }
-
-  // Bottom text area
-  cover.drawRectangle({ x: 0, y: 0, width: W, height: H * 0.42, color: C.dark })
-
-  // Top bar
-  cover.drawRectangle({ x: 0, y: H - 46, width: W, height: 46, color: rgb(0,0,0), opacity: 0.55 })
-  cover.drawText('DIGIFORGE AI', { x: ML, y: H - 29, size: 9, font: bold, color: C.white, opacity: 0.85 })
-  cover.drawText('Digital Product Studio', { x: W - MR - 122, y: H - 29, size: 8.5, font: reg, color: C.white, opacity: 0.50 })
-
-  // Gold accent bar
-  cover.drawRectangle({ x: ML, y: H * 0.42 + 2, width: 44, height: 3.5, color: C.gold })
-
-  // Cover title — large, white, wrapped
-  const titleWords = clean(content.title).split(' ')
-  let tl = '', tLines: string[] = []
-  for (const w of titleWords) {
-    const test = tl ? `${tl} ${w}` : w
-    try {
-      bold.widthOfTextAtSize(test, T.coverTitle.size) <= TW ? (tl = test) : (tLines.push(tl), tl = w)
-    } catch { tl = w }
-  }
-  if (tl) tLines.push(tl)
-
-  let ty = H * 0.39 - 8
-  for (const line of tLines) {
-    cover.drawText(line, { x: ML, y: ty, size: T.coverTitle.size, font: bold, color: C.white })
-    ty -= T.coverTitle.lh + 4
-  }
-
-  // Subtitle
-  if (content.subtitle) {
-    ty -= 6
-    const subLines = wrapLines(content.subtitle, reg, T.coverSub.size, TW)
-    for (const l of subLines) {
-      if (!l) continue
-      cover.drawText(l, { x: ML, y: ty, size: T.coverSub.size, font: reg, color: rgb(0.76, 0.74, 0.88) })
-      ty -= T.coverSub.lh + 2
-    }
-  }
-
-  // Bottom badges
-  cover.drawRectangle({ x: ML, y: 46, width: 128, height: 24, color: C.accent, opacity: 0.90 })
-  cover.drawText(`${content.chapters.length} CHAPTERS`, { x: ML + 14, y: 57, size: 8.5, font: bold, color: C.white })
-  cover.drawRectangle({ x: ML + 140, y: 46, width: 80, height: 24, color: rgb(1,1,1), opacity: 0.08 })
-  cover.drawText('FULL GUIDE', { x: ML + 155, y: 57, size: 8.5, font: bold, color: C.white, opacity: 0.65 })
-  cover.drawText(new Date().getFullYear().toString(), { x: W - MR - 28, y: 26, size: 8.5, font: reg, color: rgb(0.4,0.4,0.5) })
-
-  // ════════════════════════════════════════
-  // TABLE OF CONTENTS
-  // ════════════════════════════════════════
-  let { page, y } = addPage()
-
-  // Header band
-  page.drawRectangle({ x: 0, y: H - 88, width: W, height: 88, color: C.dark })
-  page.drawText('TABLE OF CONTENTS', { x: ML, y: H - 44, size: 16, font: bold, color: C.white })
-  page.drawText(`${content.chapters.length} chapters`, { x: ML, y: H - 64, size: 9, font: reg, color: rgb(0.52, 0.50, 0.68) })
-
-  y = H - 106
-
-  // Introduction row
-  page.drawLine({ start: { x: ML, y: y - 2 }, end: { x: W - MR, y: y - 2 }, thickness: 0.5, color: C.rule })
-  page.drawText('Introduction', { x: ML + 4, y: y - 14, size: T.toc.size, font: reg, color: C.ink })
-  y -= 34
-
-  // Chapter rows
-  for (const [i, ch] of content.chapters.entries()) {
-    page.drawLine({ start: { x: ML, y: y - 2 }, end: { x: W - MR, y: y - 2 }, thickness: 0.5, color: C.rule })
-
-    // Number circle
-    page.drawCircle({ x: ML + 14, y: y - 9, size: 12, color: C.accent })
-    const numStr = String(i + 1)
-    page.drawText(numStr, {
-      x: i < 9 ? ML + 10 : ML + 7,
-      y: y - 13,
-      size: 8.5, font: bold, color: C.white,
-    })
-
-    // Real chapter title — strip any "Chapter N:" prefix
-    const rawTitle = clean(ch.title || `Chapter ${i + 1}`)
-    const chapterTitle = rawTitle
-      .replace(/^chapter\s*\d+[\s:\-–]*/i, '')
-      .trim()
-    const displayTitle = chapterTitle.length > 3 ? chapterTitle : `Chapter ${i + 1}`
-
-    page.drawText(displayTitle.slice(0, 58), {
-      x: ML + 34, y: y - 13,
-      size: T.toc.size,
-      font: i === 0 ? bold : reg,
-      color: C.ink,
-    })
-    y -= 30
-  }
-
-  // Conclusion row
-  page.drawLine({ start: { x: ML, y: y - 2 }, end: { x: W - MR, y: y - 2 }, thickness: 0.5, color: C.rule })
-  page.drawText('Conclusion', { x: ML + 4, y: y - 14, size: T.toc.size, font: reg, color: C.ink })
-  page.drawLine({ start: { x: ML, y: y - 28 }, end: { x: W - MR, y: y - 28 }, thickness: 0.5, color: C.rule })
-
-  drawFooter(page, 'Contents')
-
-  // ════════════════════════════════════════
-  // INTRODUCTION
-  // ════════════════════════════════════════
-  ;({ page, y } = addPage())
-
-  // Header band
-  page.drawRectangle({ x: 0, y: H - 96, width: W, height: 96, color: C.accent })
-  page.drawText('INTRODUCTION', { x: ML, y: H - 38, size: 9, font: bold, color: rgb(1,1,1), opacity: 0.60 })
-
-  const introTitleLines = wrapLines(clean(content.title), bold, T.introTitle.size, TW)
-  let iy = H - 60
-  for (const l of introTitleLines) {
-    if (!l) continue
-    page.drawText(l, { x: ML, y: iy, size: T.introTitle.size, font: bold, color: C.white })
-    iy -= T.introTitle.lh + 2
-  }
-
-  y = H - 114
-
-  // Introduction body — first paragraph is slightly larger/bolder lead-in
-  const introParas = splitParagraphs(content.introduction)
-  for (let i = 0; i < introParas.length; i++) {
-    if (y < BOTTOM + 30) {
-      drawFooter(page, 'Introduction')
-      ;({ page, y } = addPage())
+      const titleLines = wrapText(item.title, REG, 10, TEXT_WIDTH - 50);
+      
+      for (let j = 0; j < titleLines.length; j++) {
+        const line = titleLines[j];
+        tocPage.drawText(line, {
+          x: LEFT_MARGIN,
+          y: tocY,
+          size: 10,
+          font: REG,
+          color: DARK,
+        });
+        
+        if (j === 0) {
+          tocPage.drawText(`${item.page}`, {
+            x: PAGE_W - RIGHT_MARGIN - 20,
+            y: tocY,
+            size: 10,
+            font: REG,
+            color: ACCENT,
+          });
+        }
+        tocY -= 18;
+      }
+      tocY -= 4;
     }
 
-    if (i === 0) {
-      // Lead paragraph — slightly larger, regular weight (NOT bold)
-      const result = writeParagraph(page, y, introParas[i], reg, T.bodyLead.size, C.ink, T.bodyLead.lh, 'Introduction')
-      page = result.page
-      y = result.y - PARA_GAP - 4
-    } else {
-      const result = writeParagraph(page, y, introParas[i], reg, T.body.size, C.body, T.body.lh, 'Introduction')
-      page = result.page
-      y = result.y - PARA_GAP
+    drawFooter(tocPage, "Contents");
+
+    // ========== INTRODUCTION ==========
+    let { page: introPage, y: introY } = addPage();
+
+    introPage.drawRectangle({
+      x: 0,
+      y: PAGE_H - 80,
+      width: PAGE_W,
+      height: 80,
+      color: ACCENT,
+      opacity: 0.05,
+    });
+    introPage.drawText("INTRODUCTION", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 42,
+      size: 10,
+      font: BOLD,
+      color: ACCENT,
+    });
+    introPage.drawText("Getting Started", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 65,
+      size: 22,
+      font: BOLD,
+      color: DARK,
+    });
+    introPage.drawRectangle({
+      x: LEFT_MARGIN,
+      y: PAGE_H - 75,
+      width: 50,
+      height: 3,
+      color: ACCENT,
+    });
+
+    introY = PAGE_H - 125;
+
+    const introParagraphs = splitParagraphs(content?.introduction || "");
+    for (const para of introParagraphs) {
+      if (introY < FOOTER_Y + 30) {
+        drawFooter(introPage, "Introduction");
+        const newPage = addPage();
+        introPage = newPage.page;
+        introY = newPage.y;
+      }
+      const result = await writeParagraph(
+        introPage,
+        introY,
+        para,
+        REG,
+        11,
+        DARK,
+        18,
+        "Introduction",
+      );
+      introPage = result.page;
+      introY = result.y - 12;
     }
-  }
 
-  drawFooter(page, 'Introduction')
+    drawFooter(introPage, "Introduction");
 
-  // ════════════════════════════════════════
-  // CHAPTERS
-  // ════════════════════════════════════════
-  for (const [ci, ch] of content.chapters.entries()) {
-    ;({ page, y } = addPage())
+    // ========== CHAPTERS - FIXED: no word breaking, no underline ==========
+    for (let i = 0; i < (content?.chapters?.length || 0); i++) {
+      const chapter = content.chapters[i];
+      const chapterTitle = clean(chapter?.title || `Chapter ${i + 1}`);
+      const chapterNumber = (i + 1).toString().padStart(2, "0");
 
-    // Clean chapter title
-    const rawChTitle = clean(ch.title || '')
-    const chapterTitle = rawChTitle.replace(/^chapter\s*\d+[\s:\-–]*/i, '').trim()
-    const displayChTitle = chapterTitle.length > 3 ? chapterTitle : `Chapter ${ci + 1}`
+      let { page: chPage, y: chY } = addPage();
 
-    // ── Header image area ──
-    const headerH = 185
-    page.drawRectangle({ x: 0, y: H - headerH, width: W, height: headerH, color: C.dark })
+      // Chapter header background
+      chPage.drawRectangle({
+        x: 0,
+        y: PAGE_H - 100,
+        width: PAGE_W,
+        height: 100,
+        color: ACCENT,
+        opacity: 0.04,
+      });
 
-    // Fetch image based on chapter title keywords (not book title)
-    const imageQuery = displayChTitle.split(' ').slice(0, 3).join(' ')
-    try {
-      const chImgUrl = await fetchUnsplashImage(imageQuery)
-      if (chImgUrl) {
-        const chImg = await safeEmbed(doc, chImgUrl)
-        if (chImg) {
-          page.drawImage(chImg, { x: 0, y: H - headerH, width: W, height: headerH })
-          page.drawRectangle({ x: 0, y: H - headerH, width: W, height: headerH, color: rgb(0,0,0), opacity: 0.48 })
-          // Gradient at bottom of image for text legibility
-          page.drawRectangle({ x: 0, y: H - headerH, width: W, height: 60, color: rgb(0,0,0), opacity: 0.30 })
+      // Large chapter number
+      chPage.drawText(chapterNumber, {
+        x: LEFT_MARGIN,
+        y: PAGE_H - 55,
+        size: 48,
+        font: BOLD,
+        color: ACCENT,
+        opacity: 0.25,
+      });
+
+      // Chapter title - FIXED: wider width to prevent breaking
+      // Increased TEXT_WIDTH - 100 to TEXT_WIDTH - 80 for more space
+      const chTitleLines = wrapText(chapterTitle, BOLD, 20, TEXT_WIDTH - 80);
+      let chTitleY = PAGE_H - 58;
+      for (const line of chTitleLines) {
+        chPage.drawText(line, {
+          x: LEFT_MARGIN + 55,
+          y: chTitleY,
+          size: 20,
+          font: BOLD,
+          color: DARK,
+        });
+        chTitleY -= 28;
+      }
+
+      // NO underline - removed completely
+
+      chY = PAGE_H - 140;
+
+      // Chapter content
+      const contentParagraphs = splitParagraphs(chapter?.content || "");
+
+      for (let p = 0; p < contentParagraphs.length; p++) {
+        const para = contentParagraphs[p];
+        if (!para || para.length < 15) continue;
+
+        if (chY < FOOTER_Y + 40) {
+          drawFooter(chPage, chapterTitle);
+          const newPage = addPage();
+          chPage = newPage.page;
+          chY = newPage.y;
+        }
+
+        if (p === 0) {
+          const result = await writeParagraph(
+            chPage,
+            chY,
+            para,
+            REG,
+            12,
+            GRAY_MID,
+            19,
+            chapterTitle,
+          );
+          chPage = result.page;
+          chY = result.y - 8;
+        } else {
+          const result = await writeParagraph(
+            chPage,
+            chY,
+            para,
+            REG,
+            11,
+            DARK,
+            18,
+            chapterTitle,
+          );
+          chPage = result.page;
+          chY = result.y - 10;
         }
       }
-    } catch { /* continue without image */ }
 
-    // Chapter badge
-    page.drawRectangle({ x: ML, y: H - 38, width: 90, height: 19, color: C.accent, opacity: 0.88 })
-    page.drawText(`CHAPTER ${ci + 1}`, { x: ML + 10, y: H - 30, size: 7.5, font: bold, color: C.white })
+      // Key Takeaways box
+      if (chapter?.tips && chapter.tips.length > 0) {
+        const validTips = chapter.tips.filter(
+          (t: string) => t && t.length > 10,
+        );
+        if (validTips.length > 0) {
+          const boxHeight = 55 + validTips.length * 22;
 
-    // Chapter title on image — clean, white
-    const chTitleLines = wrapLines(displayChTitle, bold, T.chTitle.size, TW)
-    let cty = H - 70
-    for (const l of chTitleLines) {
-      if (!l) continue
-      page.drawText(l, { x: ML, y: cty, size: T.chTitle.size, font: bold, color: C.white })
-      cty -= T.chTitle.lh
-    }
+          if (chY - boxHeight < FOOTER_Y + 20) {
+            drawFooter(chPage, chapterTitle);
+            const newPage = addPage();
+            chPage = newPage.page;
+            chY = newPage.y;
+          }
 
-    y = H - headerH - 28
+          chY -= 25;
 
-    // ── Chapter body ──
-    const chParas = splitParagraphs(ch.content || '')
+          chPage.drawRectangle({
+            x: LEFT_MARGIN,
+            y: chY - boxHeight,
+            width: TEXT_WIDTH,
+            height: boxHeight,
+            color: GRAY_LIGHT,
+          });
+          chPage.drawRectangle({
+            x: LEFT_MARGIN,
+            y: chY - boxHeight,
+            width: 4,
+            height: boxHeight,
+            color: ACCENT,
+          });
 
-    for (let pi = 0; pi < chParas.length; pi++) {
-      if (y < BOTTOM + 24) {
-        drawFooter(page, displayChTitle)
-        ;({ page, y } = addPage())
-      }
+          chPage.drawText("KEY TAKEAWAYS", {
+            x: LEFT_MARGIN + 20,
+            y: chY - 24,
+            size: 9,
+            font: BOLD,
+            color: ACCENT,
+          });
 
-      // Pull quote: every 4th paragraph (not first), only if long enough
-      if (pi > 0 && pi % 4 === 0 && chParas[pi].length > 100) {
-        // Pick a meaningful excerpt (first sentence)
-        const firstSentence = chParas[pi].split(/[.!?]/)[0]?.trim() || ''
-        if (firstSentence.length > 40) {
-          const qLines = wrapLines(firstSentence, ital, 11.5, TW - 40).filter(l => l)
-          const qH = qLines.length * 19 + 36
-
-          if (y - qH > BOTTOM + 20) {
-            y -= 6
-            page.drawRectangle({ x: ML, y: y - qH, width: TW, height: qH, color: C.tint2 })
-            page.drawRectangle({ x: ML, y: y - qH, width: 3.5, height: qH, color: C.accent })
-            // Quote mark
-            page.drawText('\u201C', { x: ML + 14, y: y - 6, size: 20, font: bold, color: C.accent, opacity: 0.7 })
-
-            let qy = y - 14
-            for (const ql of qLines) {
-              page.drawText(ql, { x: ML + 28, y: qy, size: 11.5, font: ital, color: rgb(0.26, 0.20, 0.44) })
-              qy -= 19
+          let tipY = chY - 45;
+          for (const tip of validTips.slice(0, 4)) {
+            const tipLines = wrapText(tip, REG, 10, TEXT_WIDTH - 60);
+            chPage.drawText("•", {
+              x: LEFT_MARGIN + 20,
+              y: tipY - 2,
+              size: 11,
+              font: BOLD,
+              color: ACCENT,
+            });
+            for (const line of tipLines) {
+              chPage.drawText(line, {
+                x: LEFT_MARGIN + 34,
+                y: tipY,
+                size: 10,
+                font: REG,
+                color: DARK,
+              });
+              tipY -= 16;
             }
-            y -= qH + 12
+            tipY -= 6;
           }
+          chY -= boxHeight + 20;
         }
       }
 
-      // Body paragraph — first para of chapter: bold lead sentence
-      if (pi === 0) {
-        // First sentence bold, rest regular
-        const sentences = chParas[pi].split(/(?<=[.!?])\s+/)
-        const leadSentence = sentences[0] || ''
-        const rest = sentences.slice(1).join(' ')
+      drawFooter(chPage, chapterTitle);
+    }
 
-        if (leadSentence) {
-          const result = writeParagraph(page, y, leadSentence, bold, T.body.size, C.ink, T.body.lh, displayChTitle)
-          page = result.page
-          y = result.y
-        }
-        if (rest) {
-          const result = writeParagraph(page, y, rest, reg, T.body.size, C.body, T.body.lh, displayChTitle)
-          page = result.page
-          y = result.y
-        }
-        y -= PARA_GAP
-      } else {
-        const result = writeParagraph(page, y, chParas[pi], reg, T.body.size, C.body, T.body.lh, displayChTitle)
-        page = result.page
-        y = result.y - PARA_GAP
+    // ========== CONCLUSION ==========
+    let { page: concPage, y: concY } = addPage();
+
+    concPage.drawRectangle({
+      x: 0,
+      y: PAGE_H - 80,
+      width: PAGE_W,
+      height: 80,
+      color: ACCENT,
+      opacity: 0.05,
+    });
+    concPage.drawText("CONCLUSION", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 42,
+      size: 10,
+      font: BOLD,
+      color: ACCENT,
+    });
+    concPage.drawText("Your Journey Forward", {
+      x: LEFT_MARGIN,
+      y: PAGE_H - 65,
+      size: 22,
+      font: BOLD,
+      color: DARK,
+    });
+    concPage.drawRectangle({
+      x: LEFT_MARGIN,
+      y: PAGE_H - 75,
+      width: 50,
+      height: 3,
+      color: ACCENT,
+    });
+
+    concY = PAGE_H - 125;
+
+    const conclusionParagraphs = splitParagraphs(content?.conclusion || "");
+    for (const para of conclusionParagraphs) {
+      if (concY < FOOTER_Y + 40) {
+        drawFooter(concPage, "Conclusion");
+        const newPage = addPage();
+        concPage = newPage.page;
+        concY = newPage.y;
+      }
+      const result = await writeParagraph(
+        concPage,
+        concY,
+        para,
+        REG,
+        11,
+        DARK,
+        18,
+        "Conclusion",
+      );
+      concPage = result.page;
+      concY = result.y - 10;
+    }
+
+    if (content?.callToAction && concY > FOOTER_Y + 100) {
+      concY -= 30;
+      const ctaLines = wrapText(
+        content.callToAction,
+        BOLD,
+        12,
+        TEXT_WIDTH - 60,
+      );
+      const ctaHeight = ctaLines.length * 22 + 50;
+
+      concPage.drawRectangle({
+        x: LEFT_MARGIN,
+        y: concY - ctaHeight,
+        width: TEXT_WIDTH,
+        height: ctaHeight,
+        color: ACCENT,
+        opacity: 0.06,
+      });
+      concPage.drawRectangle({
+        x: LEFT_MARGIN,
+        y: concY - 30,
+        width: 60,
+        height: 3,
+        color: ACCENT,
+      });
+      concPage.drawText("NEXT STEPS", {
+        x: LEFT_MARGIN + 20,
+        y: concY - 22,
+        size: 9,
+        font: BOLD,
+        color: ACCENT,
+      });
+
+      let ctaY = concY - 44;
+      for (const line of ctaLines) {
+        concPage.drawText(line, {
+          x: LEFT_MARGIN + 20,
+          y: ctaY,
+          size: 12,
+          font: BOLD,
+          color: DARK,
+        });
+        ctaY -= 22;
       }
     }
 
-    // ── Key Takeaways ──
-    if (ch.tips?.length) {
-      const validTips = ch.tips
-        .map((t: string) => clean(String(t)))
-        .filter((t: string) => t.length > 8)
+    drawFooter(concPage, "Conclusion");
 
-      if (validTips.length > 0) {
-        // Calculate box height
-        let boxH = 40  // header
-        for (const tip of validTips) {
-          const lines = wrapLines(tip, reg, T.tip.size, TW - 38).filter(l => l)
-          boxH += lines.length * T.tip.lh + 8
-        }
-        boxH += 8 // bottom padding
+    // ========== BACK COVER ==========
+    const backPage = doc.addPage([PAGE_W, PAGE_H]);
 
-        // Force new page if not enough room
-        if (y - boxH < BOTTOM + 16) {
-          drawFooter(page, displayChTitle)
-          ;({ page, y } = addPage())
-        }
+    backPage.drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_W,
+      height: PAGE_H,
+      color: DARK,
+    });
+    backPage.drawRectangle({
+      x: 0,
+      y: PAGE_H - 4,
+      width: PAGE_W,
+      height: 4,
+      color: ACCENT,
+    });
+    backPage.drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_W,
+      height: 4,
+      color: ACCENT,
+    });
 
-        y -= 12
-        page.drawRectangle({ x: ML, y: y - boxH, width: TW, height: boxH, color: C.tint })
-        page.drawRectangle({ x: ML, y: y - boxH, width: 3.5, height: boxH, color: C.accent })
+    const quoteLines = wrapText(
+      "The best investment you can make is in yourself. Knowledge is the currency that never devalues.",
+      ITAL,
+      13,
+      TEXT_WIDTH - 40,
+    );
 
-        // Header
-        page.drawRectangle({ x: ML, y: y - 26, width: TW, height: 26, color: C.accent, opacity: 0.08 })
-        page.drawText('KEY TAKEAWAYS', { x: ML + 14, y: y - 17, size: 8, font: bold, color: C.accent })
+    let quoteY = PAGE_H / 2 + 40;
+    backPage.drawText('"', {
+      x: LEFT_MARGIN,
+      y: quoteY + 20,
+      size: 52,
+      font: BOLD,
+      color: ACCENT,
+      opacity: 0.3,
+    });
 
-        let ty2 = y - 38
-        for (const tip of validTips) {
-          const tipLines = wrapLines(tip, reg, T.tip.size, TW - 38).filter(l => l)
-          if (ty2 < y - boxH + 6) break
-
-          // Dot instead of dash
-          page.drawCircle({ x: ML + 16, y: ty2 + 3, size: 2.5, color: C.accent })
-
-          for (let li = 0; li < tipLines.length; li++) {
-            page.drawText(tipLines[li], {
-              x: ML + 26,
-              y: ty2,
-              size: T.tip.size,
-              font: reg,
-              color: C.ink,
-            })
-            ty2 -= T.tip.lh
-          }
-          ty2 -= 8
-        }
-        y -= boxH + 16
-      }
+    for (const line of quoteLines) {
+      backPage.drawText(line, {
+        x: LEFT_MARGIN + 25,
+        y: quoteY,
+        size: 13,
+        font: ITAL,
+        color: rgb(0.7, 0.7, 0.75),
+      });
+      quoteY -= 22;
     }
 
-    drawFooter(page, displayChTitle)
+    backPage.drawRectangle({
+      x: LEFT_MARGIN + 25,
+      y: quoteY - 20,
+      width: 40,
+      height: 2,
+      color: ACCENT,
+    });
+
+    backPage.drawText("DigiForge AI", {
+      x: LEFT_MARGIN + 25,
+      y: quoteY - 48,
+      size: 10,
+      font: BOLD,
+      color: rgb(1, 1, 1),
+    });
+    backPage.drawText("Premium Digital Products", {
+      x: LEFT_MARGIN + 25,
+      y: quoteY - 64,
+      size: 8,
+      font: REG,
+      color: GRAY_MID,
+    });
+
+    const pdfBytes = await doc.save();
+
+    console.log("✅ Premium PDF generated, size:", pdfBytes.length);
+
+    return new NextResponse(Buffer.from(pdfBytes), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${clean(title).replace(/\s+/g, "-")}.pdf"`,
+      },
+    });
+  } catch (error) {
+    console.error("❌ PDF generation error:", error);
+    return NextResponse.json(
+      {
+        error: "Failed to generate PDF",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    );
   }
-
-  // ════════════════════════════════════════
-  // CONCLUSION
-  // ════════════════════════════════════════
-  const lastChTitle = clean(content.chapters[content.chapters.length - 1]?.title || '').toLowerCase()
-  const lastIsConclusion = lastChTitle.includes('conclusion') || lastChTitle.includes('final') || lastChTitle.includes('putting it')
-
-  if (!lastIsConclusion) {
-    ;({ page, y } = addPage())
-
-    page.drawRectangle({ x: 0, y: H - 96, width: W, height: 96, color: C.a2 })
-    page.drawText('CONCLUSION', { x: ML, y: H - 38, size: 9, font: bold, color: rgb(1,1,1), opacity: 0.60 })
-    page.drawText('Final Thoughts', { x: ML, y: H - 68, size: 20, font: bold, color: C.white })
-
-    y = H - 114
-
-    const concParas = splitParagraphs(content.conclusion)
-    for (let i = 0; i < concParas.length; i++) {
-      if (y < BOTTOM + 24) {
-        drawFooter(page, 'Conclusion')
-        ;({ page, y } = addPage())
-      }
-      const result = writeParagraph(page, y, concParas[i], reg, T.body.size, C.body, T.body.lh, 'Conclusion')
-      page = result.page
-      y = result.y - PARA_GAP
-    }
-
-    // Call to action box
-    if (content.callToAction && y > BOTTOM + 90) {
-      y -= 20
-      const ctaLines = wrapLines(content.callToAction, bold, 11.5, TW - 36).filter(l => l)
-      const ctaH = ctaLines.length * 20 + 44
-
-      page.drawRectangle({ x: ML, y: y - ctaH, width: TW, height: ctaH, color: C.accent })
-      page.drawRectangle({ x: ML, y: y - ctaH, width: TW, height: ctaH, color: C.accent })
-      page.drawText('YOUR NEXT STEP', { x: ML + 18, y: y - 18, size: 7.5, font: bold, color: C.gold })
-
-      let cy = y - 32
-      for (const cl of ctaLines) {
-        page.drawText(cl, { x: ML + 18, y: cy, size: 11.5, font: bold, color: C.white })
-        cy -= 20
-      }
-    }
-
-    drawFooter(page, 'Conclusion')
-  }
-
-  // ════════════════════════════════════════
-  // BACK COVER
-  // ════════════════════════════════════════
-  const back = doc.addPage([W, H])
-  back.drawRectangle({ x: 0, y: 0, width: W, height: H, color: C.dark })
-  back.drawRectangle({ x: 0, y: H - 5, width: W, height: 5, color: C.accent })
-  back.drawRectangle({ x: 0, y: 0, width: W, height: 5, color: C.accent })
-
-  // Large decorative quote mark
-  back.drawText('\u201C', {
-    x: ML - 10, y: H / 2 + 110,
-    size: 100, font: bold, color: C.accent, opacity: 0.10,
-  })
-
-  const bq = 'The best investment you can make is in yourself. Knowledge is the currency that never devalues.'
-  const bqLines = wrapLines(bq, ital, 15, TW).filter(l => l)
-  let by2 = H / 2 + 72
-  for (const l of bqLines) {
-    back.drawText(l, { x: ML, y: by2, size: 15, font: ital, color: C.white, opacity: 0.80 })
-    by2 -= 24
-  }
-
-  back.drawRectangle({ x: ML, y: H / 2 - 32, width: 44, height: 3, color: C.gold })
-  back.drawText('DIGIFORGE AI', { x: ML, y: H / 2 - 52, size: 12, font: bold, color: C.white })
-  back.drawText('AI Digital Product Studio', { x: ML, y: H / 2 - 68, size: 9.5, font: reg, color: rgb(0.48, 0.46, 0.62) })
-  back.drawText('digiforgeai.app', { x: ML, y: H / 2 - 84, size: 9.5, font: reg, color: rgb(0.38, 0.36, 0.54) })
-
-  // ── EXPORT ──
-  const bytes = await doc.save()
-  return new NextResponse(Buffer.from(bytes), {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${clean(title).replace(/\s+/g, '_')}.pdf"`,
-    },
-  })
 }
