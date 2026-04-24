@@ -81,11 +81,12 @@ function extractJSON(raw: string): any {
 }
 
 export async function POST(req: Request) {
-  // ========== First, get the request data ==========
-  const { idea } = await req.json();
+    // ========== First, get the request data ==========
+    const { idea, isRegenerate = false } = await req.json();
   const chaptersCount = idea.chapterCount || 6;
   const bookLength = idea.bookLength || "medium";
   const tone = idea.tone || "Professional";
+
 
   // ========== Then authenticate user ==========
   const cookieStore = await cookies();
@@ -178,11 +179,28 @@ console.log(`⚡ Priority mode: ${isPriority ? 'ACTIVE (Pro user)' : 'OFF'}`);
     .from("generated_ebooks")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .gte("created_at", startOfMonth.toISOString());
+    .gte("generated_at", startOfMonth.toISOString());
 
-  const monthlyLimit =
-    userPlan === "free" ? 2 : userPlan === "starter" ? 10 : 30;
+  const monthlyLimit = userPlan === 'free' ? 5 : userPlan === 'starter' ? 15 : 50;
+
   const remaining = Math.max(0, monthlyLimit - (monthlyCount || 0));
+
+  // 🔥 PRO PLAN: Don't check limits on regeneration
+const isProRegenerate = userPlan === 'pro' && isRegenerate === true;
+
+if (!isProRegenerate && remaining <= 0) {
+  return NextResponse.json(
+    {
+      error: "monthly_limit_reached",
+      message: `You've reached your ${userPlan} plan limit of ${monthlyLimit} ebooks this month. Upgrade to continue generating.`,
+      remaining: 0,
+      limit: monthlyLimit,
+      planId: userPlan,
+      upgradeUrl: "/pricing",
+    },
+    { status: 403 },
+  );
+}
 
   if (remaining <= 0) {
     return NextResponse.json(
@@ -554,6 +572,9 @@ No markdown, no bold.`;
       }
     },
   });
+  if (!(userPlan === 'pro' && isRegenerate === true)) {
+  await incrementUsage(user.id);
+}
 
   return new Response(stream, {
     headers: {

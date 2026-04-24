@@ -43,6 +43,7 @@ export default function LibraryPage() {
       .from('generated_ebooks')
       .select('*')
       .eq('user_id', user.id)
+      .eq('deleted', false)
       .order('created_at', { ascending: false })
 
     if (!error && data) setEbooks(data)
@@ -119,23 +120,29 @@ const handleOpen = (ebook: Ebook) => {
     }
   }
 
-  const handleDelete = async (id: string, title: string) => {
-    toast(`Delete "${title}"?`, {
-      description: "This action cannot be undone.",
-      action: {
-        label: "Confirm Delete",
-        onClick: async () => {
-          const { error } = await supabase.from('generated_ebooks').delete().eq('id', id)
-          if (!error) {
-            setEbooks(prev => prev.filter(e => e.id !== id))
-            toast.success("Ebook removed from library")
-          } else {
-            toast.error("Error deleting ebook")
-          }
-        },
+const handleDelete = async (id: string, title: string) => {
+  toast(`Delete "${title}"?`, {
+    description: "This action cannot be undone.",
+    action: {
+      label: "Confirm Delete",
+      onClick: async () => {
+        // Soft delete - just mark as deleted instead of actually deleting
+        const { error } = await supabase
+          .from('generated_ebooks')
+          .update({ deleted: true })
+          .eq('id', id)
+        
+        if (!error) {
+          // Remove from UI so user doesn't see it anymore
+          setEbooks(prev => prev.filter(e => e.id !== id))
+          toast.success("Ebook removed from library")
+        } else {
+          toast.error("Error deleting ebook")
+        }
       },
-    })
-  }
+    },
+  })
+}
 
   return (
     <div className="flex w-full min-h-screen bg-[#f8fafc]">

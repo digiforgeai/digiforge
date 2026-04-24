@@ -27,8 +27,9 @@ function Logo() {
           alt="DigiForge Logo" 
           width={20} 
           height={20} 
-          style={{ height: 'auto' }}
-          className="object-contain"
+          style={{ width: 'auto', height: 'auto' }}
+          className="object-contain md:w-6 md:h-6"
+          priority
         />
       </div>
       <div>
@@ -85,9 +86,17 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
   const supabase = createClient()
   const [profile, setProfile] = useState({ name: 'User', email: '', avatar: '' })
 
-  useEffect(() => {
-    async function fetchUser() {
-      const { data: { user } } = await supabase.auth.getUser()
+useEffect(() => {
+  async function fetchUser() {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      
+      // Ignore lock errors
+      if (error?.message?.includes("lock") || error?.message?.includes("stole")) {
+        console.warn("Auth lock error ignored")
+        return
+      }
+      
       if (user) {
         const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         setProfile({
@@ -96,9 +105,17 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
           avatar: data?.avatar_url || ''
         })
       }
+    } catch (err: any) {
+      // Catch any other errors but ignore lock errors
+      if (err?.message?.includes("lock") || err?.message?.includes("stole")) {
+        console.warn("Auth lock error caught and ignored")
+        return
+      }
+      console.error("Failed to fetch user:", err)
     }
-    fetchUser()
-  }, [])
+  }
+  fetchUser()
+}, [])
 
 // In your Sidebar component
 const handleLogout = async () => {

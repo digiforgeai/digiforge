@@ -53,6 +53,10 @@ interface PDFContent {
   callToAction: string;
 }
 
+interface EbookData {
+  free_regenerations_used?: number;
+}
+
 const STEPS = [
   { id: 1, label: "Style", icon: <Palette className="w-4 h-4" /> },
   { id: 2, label: "Cover", icon: <ImageIcon className="w-4 h-4" /> },
@@ -83,69 +87,52 @@ const THEMES = [
 
 const TEMPLATES = [
   {
-    id: "modern",
-    label: "Modern",
-    desc: "Full-bleed image, big bold title overlay",
-    preview: (hex: string) => (
-      <div className="w-full h-28 rounded-xl overflow-hidden relative bg-gray-900">
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/20" />
-        <div className="absolute bottom-3 left-3 right-3">
-          <div
-            className="h-2 rounded mb-1.5"
-            style={{ backgroundColor: hex, width: "60%" }}
-          />
-          <div className="h-4 bg-white rounded mb-1" style={{ width: "90%" }} />
-          <div className="h-4 bg-white/80 rounded" style={{ width: "75%" }} />
-        </div>
-        <div className="absolute top-2 left-3 right-3 flex justify-between">
-          <div className="h-1.5 w-16 bg-white/40 rounded" />
-          <div className="h-1.5 w-12 bg-white/30 rounded" />
-        </div>
-      </div>
-    ),
+    id: "premium",
+    label: "Premium",
+    desc: "Dark theme with bold typography, ideal for high-ticket products",
+    icon: "👑",
+    preview: "bg-gradient-to-br from-slate-900 to-slate-800",
+    plan: "starter", // Available from Starter plan
   },
   {
-    id: "bold",
-    label: "Bold",
-    desc: "Dark top panel with title, image below",
-    preview: (hex: string) => (
-      <div className="w-full h-28 rounded-xl overflow-hidden relative bg-gray-900 flex flex-col">
-        <div
-          className="flex-1 flex flex-col justify-center px-3 py-2"
-          style={{ background: "#0f0f18" }}
-        >
-          <div
-            className="h-1.5 rounded mb-2"
-            style={{ backgroundColor: hex, width: "30%" }}
-          />
-          <div className="h-3 bg-white rounded mb-1" style={{ width: "85%" }} />
-          <div className="h-3 bg-white/70 rounded" style={{ width: "65%" }} />
-        </div>
-        <div className="h-10 bg-gray-600 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30" />
-        </div>
-      </div>
-    ),
+    id: "classic",
+    label: "Classic",
+    desc: "Clean white background, professional and timeless",
+    icon: "📖",
+    preview: "bg-white border",
+    plan: "free", // Available for Free plan
+  },
+  {
+    id: "modern",
+    label: "Modern",
+    desc: "Bold headings, accent color highlights, clean sans-serif",
+    icon: "✨",
+    preview: "bg-gradient-to-br from-indigo-50 to-white",
+    plan: "free", // Available for Free plan
   },
   {
     id: "minimal",
     label: "Minimal",
-    desc: "Clean white panel, image accent top",
-    preview: (hex: string) => (
-      <div className="w-full h-28 rounded-xl overflow-hidden relative bg-white flex flex-col border border-slate-200">
-        <div className="h-16 bg-gray-700 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20" />
-        </div>
-        <div className="h-1.5" style={{ backgroundColor: hex }} />
-        <div className="flex-1 px-3 py-2">
-          <div
-            className="h-3 bg-gray-900 rounded mb-1.5"
-            style={{ width: "80%" }}
-          />
-          <div className="h-2.5 bg-gray-400 rounded" style={{ width: "60%" }} />
-        </div>
-      </div>
-    ),
+    desc: "Ultra-clean, large margins, focused readability",
+    icon: "🌿",
+    preview: "bg-stone-50 border-stone-200",
+    plan: "starter", // Available from Starter plan
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    desc: "Magazine-style layout with pull quotes and sidebars",
+    icon: "📰",
+    preview: "bg-gradient-to-br from-amber-50 to-orange-50",
+    plan: "pro", // Pro only
+  },
+  {
+    id: "corporate",
+    label: "Corporate",
+    desc: "Business professional with structured hierarchy",
+    icon: "🏢",
+    preview: "bg-gradient-to-br from-blue-50 to-slate-50",
+    plan: "pro", // Pro only
   },
 ];
 
@@ -181,9 +168,7 @@ export default function ForgePage() {
       return "medium";
     },
   );
-  const [pdfTemplate, setPdfTemplate] = useState<"premium" | "classic">(
-    "premium",
-  );
+  const [pdfTemplate, setPdfTemplate] = useState<string>("premium");
   const [exportProgress, setExportProgress] = useState(0);
   const [theme, setTheme] = useState("indigo");
   const [template, setTemplate] = useState("modern");
@@ -209,6 +194,10 @@ export default function ForgePage() {
   const [forgeError, setForgeError] = useState<string | null>(null);
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
   const [draftData, setDraftData] = useState<any>(null);
+  const [currentEbookId, setCurrentEbookId] = useState<string | null>(null);
+  const [showQuotaWarning, setShowQuotaWarning] = useState(false);
+  const [isCheckingLimit, setIsCheckingLimit] = useState(false);
+
   const {
     plan,
     usage,
@@ -229,14 +218,35 @@ export default function ForgePage() {
     }
     return 3;
   });
+
+  // Create a helper function at the top of your component
+  const safeGetUser = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      return user;
+    } catch (err: any) {
+      // Ignore the lock error - it's harmless
+      if (err?.message?.includes("lock") || err?.message?.includes("stole")) {
+        console.warn("Auth lock error (safe to ignore):", err.message);
+        return null;
+      }
+      throw err;
+    }
+  };
   // ========== FETCH PHOTOS ==========
+  // ========== FETCH PHOTOS - IMPROVED WITH BETTER ERROR HANDLING ==========
   const fetchPhotos = useCallback(async (query: string) => {
     if (!query) return;
+
     setPhotosLoading(true);
     setPhotos([]);
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 seconds
+
       const res = await fetch(
         `/api/unsplash?query=${encodeURIComponent(query)}`,
         {
@@ -244,12 +254,31 @@ export default function ForgePage() {
         },
       );
       clearTimeout(timeoutId);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      if (!res.ok) {
+        console.warn(`Unsplash API returned ${res.status}`);
+        setPhotos([]);
+        setSelectedPhoto(null);
+        return;
+      }
+
       const data = await res.json();
-      setPhotos(data.photos || []);
-      if (data.photos?.length) setSelectedPhoto(data.photos[0]);
+
+      // Check if we got valid photos
+      if (data.photos && data.photos.length > 0) {
+        setPhotos(data.photos);
+        setSelectedPhoto(data.photos[0]);
+      } else {
+        // No photos found, use a placeholder or just show empty
+        setPhotos([]);
+        setSelectedPhoto(null);
+      }
     } catch (err) {
-      console.error("Unsplash fetch error:", err);
+      // Don't show error to user - just silently fail
+      console.warn(
+        "Unsplash fetch error:",
+        err instanceof Error ? err.message : "Unknown error",
+      );
       setPhotos([]);
       setSelectedPhoto(null);
     } finally {
@@ -286,6 +315,11 @@ export default function ForgePage() {
           setSelectedPhoto({
             urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl },
           });
+        }
+
+        // Store the ebook ID for reference (no regeneration tracking needed anymore)
+        if (ebook.id) {
+          setCurrentEbookId(ebook.id);
         }
 
         setIdea({
@@ -357,6 +391,19 @@ export default function ForgePage() {
       setBookLength("medium");
     }
   }, [plan]);
+
+  // Set default template based on plan
+  useEffect(() => {
+    if (!pdfTemplate) {
+      if (plan === "free") {
+        setPdfTemplate("classic"); // Free users get Classic as default
+      } else if (plan === "starter") {
+        setPdfTemplate("premium"); // Starter users get Premium as default
+      } else {
+        setPdfTemplate("editorial"); // Pro users get Editorial as default
+      }
+    }
+  }, [plan, pdfTemplate]);
 
   // ========== AUTO-SAVE DRAFT ==========
   useEffect(() => {
@@ -446,169 +493,208 @@ export default function ForgePage() {
   //   }, []);
 
   // ========== FUNCTIONS ==========
- const handleGenerate = async (regenerate = false) => {
-  if (!idea) return;
-  setGenerating(true);
-  setGenStep(0);
-  setGenError("");
-  
-  // Update genSteps to show priority messages for Pro users
-  if (plan === 'pro') {
-    const prioritySteps = [
-      "⚡ PRIORITY: Reading your customizations...",
-      "⚡ Writing introduction at lightning speed...",
-      ...Array.from({ length: chapterCount }, (_, i) => `⚡ Writing chapter ${i + 1} of ${chapterCount} (Priority)...`),
-      "⚡ Writing conclusion...",
-      "⚡ Finalizing your premium guide..."
-    ];
-    setGenSteps(prioritySteps);
-  } else {
-    setGenSteps(buildGenSteps(chapterCount));
-  }
-  
-  if (!regenerate) {
-    setContent(null);
-    setEditedContent(null);
-  }
-  
-  try {
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        idea: {
-          title: customTitle,
-          angle: subtitle,
-          targetAudience: idea.targetAudience,
-          tone,
-          chapterCount,
-          bookLength,
-        },
-      }),
-    });
-    if (!res.ok || !res.body) throw new Error("Request failed");
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        try {
-          const data = JSON.parse(line.slice(6));
-          
-          if (data.event === "progress") {
-            // For Pro users, handle priority step progression
-            if (plan === 'pro') {
-              // Progress through steps based on the message content
-              const stepMessage = data.step || "";
-              
-              // Determine which step we're on
-              let stepIndex = -1;
-              
-              if (stepMessage.includes("Planning") || stepMessage.includes("structure")) {
-                stepIndex = 0;
-              } else if (stepMessage.includes("introduction") || stepMessage.includes("Intro")) {
-                stepIndex = 1;
-              } else if (stepMessage.includes("chapter")) {
-                // Extract chapter number from message
-                const chapterMatch = stepMessage.match(/chapter (\d+)/i);
-                if (chapterMatch) {
-                  const chapterNum = parseInt(chapterMatch[1]);
-                  stepIndex = 1 + chapterNum; // intro is 1, chapters start at 2
-                }
-              } else if (stepMessage.includes("conclusion")) {
-                stepIndex = 1 + chapterCount + 1; // after all chapters
-              } else if (stepMessage.includes("Finalizing")) {
-                stepIndex = 1 + chapterCount + 2; // last step
-              }
-              
-              if (stepIndex !== -1 && stepIndex < genSteps.length) {
-                setGenStep(stepIndex);
-              } else {
-                // Fallback: increment step gradually
-                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 1));
-              }
-            } else {
-              // Regular users - use existing logic
-              const idx = genSteps.findIndex((s) =>
-                s.toLowerCase().includes(
-                  data.step?.toLowerCase()?.split(" ").slice(0, 3).join(" ") || ""
-                )
-              );
-              if (idx !== -1) {
-                setGenStep(idx);
-              } else {
-                setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
-              }
-            }
-          }
-          
-          if (data.event === "chapter_done") {
-            if (plan === 'pro') {
-              // Update to show current chapter progress
-              const chapterIndex = 1 + (data.chapter || 0);
-              if (chapterIndex < genSteps.length) {
-                setGenStep(chapterIndex);
-              }
-            } else {
-              setGenStep(2 + (data.chapter - 1));
-            }
-          }
-          
-          if (data.event === "done") {
-            setGenStep(genSteps.length - 1);
-            await sleep(600);
-            setContent(data.content);
-            setEditedContent(data.content);
-            setStep(5);
-            
-            await refreshUsage();
-            
-            // ========== SAVE TO DATABASE ONLY ON FIRST GENERATION ==========
-            const isFromLibrary = sessionStorage.getItem("isFromLibrary") === "true";
-            const isNewGeneration = !isFromLibrary && !sessionStorage.getItem("forge_restore_ebook");
-            
-            if (isNewGeneration) {
-              try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user && data.content) {
-                  await saveToSupabase({
-                    title: data.content.title || customTitle,
-                    subtitle: data.content.subtitle || subtitle,
-                    niche: idea?.niche || "",
-                    theme: theme,
-                    template: pdfTemplate || "premium",
-                    chapterCount: data.content.chapters?.length || 0,
-                    coverImageUrl: selectedPhoto?.urls?.regular || null,
-                    content: data.content,
-                  });
-                  console.log("New ebook saved to library");
-                  clearDraft();
-                }
-              } catch (err) {
-                console.error("Could not save to library:", err);
-              }
-            }
-            
-            sessionStorage.removeItem("isFromLibrary");
-          }
-          
-          if (data.event === "error") throw new Error(data.message);
-        } catch {}
+
+  const handleGenerate = async (regenerate = false) => {
+    if (!idea) return;
+
+    // 🔥 CRITICAL FIX: Enforce chapter limits based on plan
+    let effectiveChapterCount = chapterCount;
+
+    if (plan === "free") {
+      effectiveChapterCount = Math.min(3, chapterCount);
+      if (chapterCount > 3) {
+        console.warn(
+          `Free user attempted ${chapterCount} chapters, limiting to 3`,
+        );
+        setChapterCount(3);
       }
+    } else if (plan === "starter") {
+      effectiveChapterCount = Math.min(6, chapterCount);
+    } else if (plan === "pro") {
+      effectiveChapterCount = Math.min(12, chapterCount);
     }
-  } catch (err: any) {
-    setGenError(err.message || "Generation failed. Try again.");
-  } finally {
-    setGenerating(false);
-  }
-};
+
+    setGenerating(true);
+    setGenStep(0);
+    setGenError("");
+
+    // Update genSteps with CORRECTED chapter count
+    if (plan === "pro" || plan === "starter") {
+      const prioritySteps = [
+        "⚡ PRIORITY: Reading your customizations...",
+        "⚡ Writing introduction at lightning speed...",
+        ...Array.from(
+          { length: effectiveChapterCount },
+          (_, i) =>
+            `⚡ Writing chapter ${i + 1} of ${effectiveChapterCount} (Priority)...`,
+        ),
+        "⚡ Writing conclusion...",
+        "⚡ Finalizing your premium guide...",
+      ];
+      setGenSteps(prioritySteps);
+    } else {
+      setGenSteps(buildGenSteps(effectiveChapterCount));
+    }
+
+    if (!regenerate) {
+      setContent(null);
+      setEditedContent(null);
+    }
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idea: {
+            title: customTitle,
+            angle: subtitle,
+            targetAudience: idea.targetAudience,
+            tone,
+            chapterCount: effectiveChapterCount,
+            bookLength,
+          },
+          isRegenerate: regenerate,
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error("Request failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.event === "progress") {
+              if (plan === "pro" || plan === "starter") {
+                const stepMessage = data.step || "";
+                let stepIndex = -1;
+
+                if (
+                  stepMessage.includes("Planning") ||
+                  stepMessage.includes("structure")
+                ) {
+                  stepIndex = 0;
+                } else if (
+                  stepMessage.includes("introduction") ||
+                  stepMessage.includes("Intro")
+                ) {
+                  stepIndex = 1;
+                } else if (stepMessage.includes("chapter")) {
+                  const chapterMatch = stepMessage.match(/chapter (\d+)/i);
+                  if (chapterMatch) {
+                    const chapterNum = parseInt(chapterMatch[1]);
+                    stepIndex = 1 + chapterNum;
+                  }
+                } else if (stepMessage.includes("conclusion")) {
+                  stepIndex = 1 + chapterCount + 1;
+                } else if (stepMessage.includes("Finalizing")) {
+                  stepIndex = 1 + chapterCount + 2;
+                }
+
+                if (stepIndex !== -1 && stepIndex < genSteps.length) {
+                  setGenStep(stepIndex);
+                } else {
+                  setGenStep((prev) => Math.min(prev + 1, genSteps.length - 1));
+                }
+              } else {
+                const idx = genSteps.findIndex((s) =>
+                  s
+                    .toLowerCase()
+                    .includes(
+                      data.step
+                        ?.toLowerCase()
+                        ?.split(" ")
+                        .slice(0, 3)
+                        .join(" ") || "",
+                    ),
+                );
+                if (idx !== -1) {
+                  setGenStep(idx);
+                } else {
+                  setGenStep((prev) => Math.min(prev + 1, genSteps.length - 2));
+                }
+              }
+            }
+
+            if (data.event === "chapter_done") {
+              if (plan === "pro") {
+                const chapterIndex = 1 + (data.chapter || 0);
+                if (chapterIndex < genSteps.length) {
+                  setGenStep(chapterIndex);
+                }
+              } else {
+                setGenStep(2 + (data.chapter - 1));
+              }
+            }
+
+            if (data.event === "done") {
+              setGenStep(genSteps.length - 1);
+              await sleep(600);
+              setContent(data.content);
+              setEditedContent(data.content);
+              setStep(5);
+
+              await refreshUsage();
+
+              // ========== SIMPLIFIED SAVE LOGIC - ALWAYS CREATE NEW RECORD ==========
+              const isFromLibrary =
+                sessionStorage.getItem("isFromLibrary") === "true";
+              const isNewGeneration =
+                !isFromLibrary &&
+                !sessionStorage.getItem("forge_restore_ebook");
+
+              if (isNewGeneration) {
+                try {
+                  const user = await safeGetUser();
+                  if (user && data.content) {
+                    const result = await saveToSupabase({
+                      title: data.content.title || customTitle,
+                      subtitle: data.content.subtitle || subtitle,
+                      niche: idea?.niche || "",
+                      theme: theme,
+                      template: pdfTemplate || "premium",
+                      chapterCount: data.content.chapters?.length || 0,
+                      coverImageUrl: selectedPhoto?.urls?.regular || null,
+                      content: data.content,
+                    });
+
+                    if (result && result.id) {
+                      setCurrentEbookId(result.id);
+                    }
+
+                    console.log("Ebook saved to library");
+                    clearDraft();
+                  }
+                } catch (err) {
+                  console.error("Could not save ebook:", err);
+                }
+              }
+
+              sessionStorage.removeItem("isFromLibrary");
+            }
+
+            if (data.event === "error") throw new Error(data.message);
+          } catch (err) {
+            // Inner catch for JSON parsing errors - ignore and continue
+            console.warn("Error parsing SSE data:", err);
+          }
+        }
+      }
+    } catch (err: any) {
+      setGenError(err.message || "Generation failed. Try again.");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleExport = async () => {
     if (!editedContent) {
@@ -684,78 +770,80 @@ export default function ForgePage() {
   };
 
   // Add this function alongside handleExport
-const handleDocxExport = async () => {
-  if (!editedContent) {
-    console.error("No content to export");
-    setExportError("No content available. Please generate the ebook first.");
-    return;
-  }
+  const handleDocxExport = async () => {
+    if (!editedContent) {
+      console.error("No content to export");
+      setExportError("No content available. Please generate the ebook first.");
+      return;
+    }
 
-  // Double-check Pro plan
-  if (plan !== "pro") {
-    setShowUpgradeModal(true);
-    toast.error("DOCX export is only available on Pro plans");
-    return;
-  }
+    // Double-check Pro plan
+    if (plan !== "pro") {
+      setShowUpgradeModal(true);
+      toast.error("DOCX export is only available on Pro plans");
+      return;
+    }
 
-  setExporting(true);
-  setExportError("");
-  try {
-    console.log("📄 Starting DOCX export for:", customTitle);
-    const response = await fetch("/api/docx", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: {
-          title: editedContent.title || customTitle,
-          subtitle: editedContent.subtitle || subtitle,
-          introduction: editedContent.introduction || "",
-          chapters: editedContent.chapters || [],
-          conclusion: editedContent.conclusion || "",
-          callToAction: editedContent.callToAction || "",
-        },
-        title: customTitle,
-        coverImageUrl: selectedPhoto?.urls?.regular || null,
-        theme: theme,
-      }),
-    });
+    setExporting(true);
+    setExportError("");
+    try {
+      console.log("📄 Starting DOCX export for:", customTitle);
+      const response = await fetch("/api/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: editedContent.title || customTitle,
+            subtitle: editedContent.subtitle || subtitle,
+            introduction: editedContent.introduction || "",
+            chapters: editedContent.chapters || [],
+            conclusion: editedContent.conclusion || "",
+            callToAction: editedContent.callToAction || "",
+          },
+          title: customTitle,
+          coverImageUrl: selectedPhoto?.urls?.regular || null,
+          theme: theme,
+        }),
+      });
 
-    if (response.status === 403) {
-      const errorData = await response.json();
-      if (errorData.error === "plan_restricted") {
-        setShowUpgradeModal(true);
-        setExportError(errorData.message || "DOCX export requires Pro plan");
-        setExporting(false);
-        return;
+      if (response.status === 403) {
+        const errorData = await response.json();
+        if (errorData.error === "plan_restricted") {
+          setShowUpgradeModal(true);
+          setExportError(errorData.message || "DOCX export requires Pro plan");
+          setExporting(false);
+          return;
+        }
+        throw new Error(
+          errorData.message || `Export failed: ${response.status}`,
+        );
       }
-      throw new Error(errorData.message || `Export failed: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("DOCX export failed:", errorText);
+        throw new Error(`Export failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${customTitle.replace(/[^a-z0-9]/gi, "_").slice(0, 50)}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success("DOCX exported successfully!");
+    } catch (err: any) {
+      console.error("DOCX export error:", err);
+      setExportError(err.message || "DOCX export failed. Please try again.");
+      toast.error("DOCX export failed");
+    } finally {
+      setExporting(false);
     }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("DOCX export failed:", errorText);
-      throw new Error(`Export failed: ${response.status}`);
-    }
-
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${customTitle.replace(/[^a-z0-9]/gi, "_").slice(0, 50)}.docx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    toast.success("DOCX exported successfully!");
-  } catch (err: any) {
-    console.error("DOCX export error:", err);
-    setExportError(err.message || "DOCX export failed. Please try again.");
-    toast.error("DOCX export failed");
-  } finally {
-    setExporting(false);
-  }
-};
+  };
 
   const updateChapter = (idx: number, field: string, value: string) => {
     if (!editedContent) return;
@@ -917,6 +1005,47 @@ const handleDocxExport = async () => {
           </div>
         </div>
 
+        {/* Friendly Quota Warning - Not Redirecting */}
+        {plan !== "pro" && usage.remaining === 0 && (
+          <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                <svg
+                  className="w-5 h-5 text-amber-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-800">
+                  Generation limit reached
+                </p>
+                <p className="text-xs text-amber-700">
+                  You've used all {usage.limit} generations this month.
+                  {plan === "free" &&
+                    " Upgrade to Starter for 15 generations/month or Pro for 50 generations/month."}
+                  {plan === "starter" &&
+                    " Upgrade to Pro for 50 generations/month."}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition shrink-0"
+            >
+              Upgrade Now
+            </button>
+          </div>
+        )}
+
         {/* ── STEP 1: Style — Theme + Template ── */}
         {step === 1 && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
@@ -927,71 +1056,129 @@ const handleDocxExport = async () => {
               Select a template and accent color for your ebook.
             </p>
 
-            {/* Template picker - UPDATED with PREMIUM option */}
+            {/* Template picker - filtered by plan with default selection */}
             <div className="mb-7">
-              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-3">
-                PDF Template
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  {
-                    id: "premium",
-                    label: "Premium",
-                    desc: "Dark theme with bold typography, ideal for high-ticket products",
-                    icon: "👑",
-                    preview: "bg-gradient-to-br from-slate-900 to-slate-800",
-                  },
-                  {
-                    id: "classic",
-                    label: "Classic",
-                    desc: "Clean white background, professional and timeless",
-                    icon: "📖",
-                    preview: "bg-white border",
-                  },
-                ].map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() =>
-                      setPdfTemplate(t.id as "premium" | "classic")
-                    }
-                    className={`text-left rounded-2xl border-2 p-4 transition-all cursor-pointer ${
-                      pdfTemplate === t.id
-                        ? "border-indigo-500 bg-indigo-50/50 shadow-md shadow-indigo-100"
-                        : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{t.icon}</span>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <p
-                            className={`text-sm font-black ${pdfTemplate === t.id ? "text-indigo-700" : "text-slate-800"}`}
-                          >
-                            {t.label}
-                          </p>
-                          {pdfTemplate === t.id && (
-                            <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                              <Check className="w-2.5 h-2.5 text-white" />
-                            </div>
-                          )}
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                  PDF Template
+                </label>
+                {plan !== "pro" && (
+                  <span className="text-[10px] text-indigo-500 font-medium bg-indigo-50 px-2 py-0.5 rounded-full">
+                    {plan === "free"
+                      ? "2 templates available"
+                      : "4 templates available"}
+                  </span>
+                )}
+                {plan === "pro" && (
+                  <span className="text-[10px] text-purple-500 font-medium bg-purple-50 px-2 py-0.5 rounded-full">
+                    6 premium templates
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {TEMPLATES.filter((t) => {
+                  if (plan === "free") return t.plan === "free";
+                  if (plan === "starter")
+                    return t.plan === "free" || t.plan === "starter";
+                  return true; // Pro gets all
+                }).map((t) => {
+                  const isLocked =
+                    (plan === "free" && t.plan !== "free") ||
+                    (plan === "starter" && t.plan === "pro");
+                  const isSelected = pdfTemplate === t.id;
+
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => !isLocked && setPdfTemplate(t.id as any)}
+                      className={`relative text-left rounded-2xl border-2 p-4 transition-all cursor-pointer ${
+                        isSelected && !isLocked
+                          ? "border-indigo-500 bg-indigo-50/50 shadow-md shadow-indigo-100 ring-2 ring-indigo-200"
+                          : isLocked
+                            ? "border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed"
+                            : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                      }`}
+                      disabled={isLocked}
+                    >
+                      {isLocked && (
+                        <div className="absolute top-2 right-2 bg-slate-200 rounded-full px-2 py-0.5">
+                          <span className="text-[8px] font-black text-slate-500 uppercase">
+                            {t.plan === "pro" ? "PRO" : "UPGRADE"}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-slate-400 mb-2">
-                          {t.desc}
-                        </p>
-                        <div
-                          className={`h-16 rounded-lg ${t.preview} ${t.id === "classic" ? "border border-slate-200" : ""}`}
-                        >
-                          <div className="p-2">
-                            <div className="w-8 h-1.5 rounded bg-indigo-500 mb-2" />
-                            <div className="w-full h-1.5 bg-slate-300 rounded mb-1 opacity-50" />
-                            <div className="w-3/4 h-1.5 bg-slate-300 rounded opacity-30" />
+                      )}
+
+                      {isSelected && !isLocked && (
+                        <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg">
+                          <Check className="w-3.5 h-3.5 text-white" />
+                        </div>
+                      )}
+
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl">{t.icon}</span>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <p
+                              className={`text-sm font-black ${isSelected && !isLocked ? "text-indigo-700" : isLocked ? "text-slate-400" : "text-slate-800"}`}
+                            >
+                              {t.label}
+                            </p>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mb-2">
+                            {t.desc}
+                          </p>
+                          <div
+                            className={`h-16 rounded-lg overflow-hidden ${t.preview} ${t.id === "classic" ? "border border-slate-200" : ""}`}
+                          >
+                            <div className="p-2">
+                              <div className="w-8 h-1.5 rounded bg-indigo-500 mb-2" />
+                              <div className="w-full h-1.5 bg-slate-300 rounded mb-1 opacity-50" />
+                              <div className="w-3/4 h-1.5 bg-slate-300 rounded opacity-30" />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Template recommendation message */}
+              {pdfTemplate && (
+                <div className="mt-3 p-2 bg-indigo-50/50 rounded-lg border border-indigo-100">
+                  <p className="text-[10px] text-indigo-600 text-center">
+                    ✓{" "}
+                    <span className="font-bold">
+                      {TEMPLATES.find((t) => t.id === pdfTemplate)?.label}
+                    </span>{" "}
+                    template selected
+                    {plan === "free" &&
+                      pdfTemplate === "classic" &&
+                      " — Great choice for clean, professional ebooks"}
+                    {plan === "starter" &&
+                      pdfTemplate === "premium" &&
+                      " — Best for high-converting products"}
+                    {plan === "pro" &&
+                      pdfTemplate === "editorial" &&
+                      " — Perfect for establishing authority"}
+                  </p>
+                </div>
+              )}
+
+              {/* Upgrade message for locked templates */}
+              {plan === "free" && (
+                <p className="text-center text-xs text-slate-400 mt-3">
+                  🔒 Upgrade to Starter for 2 more templates, or Pro for 5+
+                  premium templates
+                </p>
+              )}
+              {plan === "starter" && (
+                <p className="text-center text-xs text-slate-400 mt-3">
+                  🔒 Upgrade to Pro for 2 premium templates (Editorial &
+                  Corporate)
+                </p>
+              )}
             </div>
 
             {/* Theme picker */}
@@ -1355,24 +1542,22 @@ const handleDocxExport = async () => {
                       </span>
                     </div>
 
-                    {/* Plan limit badge */}
-                    <div className="mb-3">
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                          plan === "free"
-                            ? "bg-slate-100 text-slate-600"
-                            : plan === "starter"
-                              ? "bg-indigo-100 text-indigo-600"
-                              : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
-                        }`}
-                      >
-                        {plan === "free"
-                          ? "Free: Max 3 chapters"
+                    {/* // Plan limit badge */}
+                    <span
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                        plan === "free"
+                          ? "bg-slate-100 text-slate-600"
                           : plan === "starter"
-                            ? "Starter: Max 6 chapters"
-                            : "Pro: Up to 12 chapters"}
-                      </span>
-                    </div>
+                            ? "bg-indigo-100 text-indigo-600"
+                            : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
+                      }`}
+                    >
+                      {plan === "free"
+                        ? "Free: Max 3 chapters"
+                        : plan === "starter"
+                          ? "Starter: Max 6 chapters"
+                          : "Pro: Up to 12 chapters"}
+                    </span>
 
                     {/* Slider - Different for each plan */}
                     {plan === "free" ? (
@@ -1381,7 +1566,6 @@ const handleDocxExport = async () => {
                         Free plan limited to 3 chapters
                       </div>
                     ) : plan === "starter" ? (
-                      // Starter plan - slider from 4 to 6
                       <div>
                         <input
                           type="range"
@@ -1395,13 +1579,12 @@ const handleDocxExport = async () => {
                           className="w-full accent-indigo-600 cursor-pointer"
                         />
                         <div className="flex justify-between text-xs text-slate-400 mt-1">
-                          <span>4 chapters</span>
-                          <span>5 chapters</span>
-                          <span>6 chapters</span>
+                          <span>4</span>
+                          <span>5</span>
+                          <span>6</span>
                         </div>
                       </div>
-                    ) : (
-                      // Pro plan - slider from 4 to 12
+                    ) : plan === "pro" ? (
                       <div>
                         <input
                           type="range"
@@ -1422,7 +1605,7 @@ const handleDocxExport = async () => {
                           <span>12</span>
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Progress bar and page estimate */}
                     <div className="flex items-center gap-2 mt-3">
@@ -1491,14 +1674,15 @@ const handleDocxExport = async () => {
                               >
                                 Upgrade to Starter
                               </button>{" "}
-                              to continue creating.
+                              for 15 generations per month.
                             </p>
                           </div>
-                        ) : usage.remaining === 1 ? (
-                          // One generation left
+                        ) : usage.remaining <= 2 ? (
+                          // Low generations left (2 or less)
                           <div className="mt-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
                             <p className="text-[10px] text-blue-700 font-medium">
-                              ⚡ You have {usage.remaining} generation left this
+                              ⚡ You have {usage.remaining} generation
+                              {usage.remaining !== 1 ? "s" : ""} left this
                               month.{" "}
                               <button
                                 onClick={() => setShowUpgradeModal(true)}
@@ -1506,7 +1690,7 @@ const handleDocxExport = async () => {
                               >
                                 Upgrade to Starter
                               </button>{" "}
-                              for 10 generations per month.
+                              for 15 generations per month.
                             </p>
                           </div>
                         ) : chapterCount > 3 ? (
@@ -1620,18 +1804,18 @@ const handleDocxExport = async () => {
               </button>
               <button
                 onClick={async () => {
+                  setIsCheckingLimit(true);
                   await refreshUsage();
-                  if (usage.remaining <= 0 && plan === "free") {
+                  setIsCheckingLimit(false);
+
+                  if (plan !== "pro" && usage.remaining <= 0) {
                     setShowUpgradeModal(true);
-                    toast.warning(
-                      `You've used all ${usage.limit} free generations this month.`,
-                    );
                     return;
                   }
                   setStep(4);
                   setTimeout(() => handleGenerate(false), 300);
                 }}
-                disabled={!customTitle}
+                disabled={!customTitle || isCheckingLimit}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
               >
                 <Sparkles className="w-4 h-4" />
@@ -1765,60 +1949,60 @@ const handleDocxExport = async () => {
                   Edit any section, then export your PDF
                 </p>
               </div>
-{/* // In step 5, replace the export button section with this: */}
+              {/* // In step 5, replace the export button section with this: */}
 
-<div className="flex gap-2">
-  {/* Regenerate button */}
-  <button
-    onClick={async () => {
-      await refreshUsage();
-      if (usage.remaining <= 0 && plan === "free") {
-        setShowUpgradeModal(true);
-        toast.warning(
-          `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
-        );
-        return;
-      }
-      setStep(4);
-      setTimeout(() => handleGenerate(true), 300);
-    }}
-    className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
-  >
-    <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-  </button>
+              <div className="flex gap-2">
+                {/* Regenerate button - SIMPLE VERSION */}
+                <button
+                  onClick={async () => {
+                    // Check if user has generation credits left
+                    if (usage.remaining <= 0 && plan === "free") {
+                      setShowUpgradeModal(true);
+                      toast.warning(
+                        `You've used all ${usage.limit} free generations this month. Upgrade to continue.`,
+                      );
+                      return;
+                    }
+                    setStep(4);
+                    setTimeout(() => handleGenerate(true), 300);
+                  }}
+                  className="flex items-center gap-2 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+                </button>
 
-  {/* DOCX Export - Pro Only */}
-  {plan === "pro" && (
-    <button
-      onClick={handleDocxExport}
-      disabled={exporting}
-      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
-    >
-      <FileText className="w-3.5 h-3.5" />
-      {exporting ? "..." : "DOCX"}
-    </button>
-  )}
+                {/* DOCX Export - Pro Only */}
+                {plan === "pro" && (
+                  <button
+                    onClick={handleDocxExport}
+                    disabled={exporting}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    {exporting ? "..." : "DOCX"}
+                  </button>
+                )}
 
-  {/* PDF Export */}
-  <button
-    onClick={handleExport}
-    disabled={exporting}
-    className={`flex items-center gap-2 font-black text-xs px-4 py-2.5 rounded-xl transition cursor-pointer ${
-      exporting
-        ? "bg-indigo-400 cursor-not-allowed"
-        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
-    } text-white`}
-  >
-    {exporting ? (
-      <>Generating...</>
-    ) : (
-      <>
-        <Download className="w-3.5 h-3.5" />
-        PDF
-      </>
-    )}
-  </button>
-</div>
+                {/* PDF Export */}
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className={`flex items-center gap-2 font-black text-xs px-4 py-2.5 rounded-xl transition cursor-pointer ${
+                    exporting
+                      ? "bg-indigo-400 cursor-not-allowed"
+                      : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
+                  } text-white`}
+                >
+                  {exporting ? (
+                    <>Generating...</>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      PDF
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {exportError && (
@@ -1985,14 +2169,13 @@ const handleDocxExport = async () => {
               <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
                 Your Product is Ready! 🎉
               </h2>
-              <p className="text-slate-400 text-sm mb-8">
-                PDF downloaded. Your ebook has been saved to your library.
-              </p>
+
               {/* After PDF downloaded message */}
-<p className="text-slate-400 text-sm mb-8">
-  PDF downloaded{plan === "pro" ? " (DOCX also available in Pro)" : ""}. 
-  Your ebook has been saved to your library.
-</p>
+              <p className="text-slate-400 text-sm mb-8">
+                PDF downloaded
+                {plan === "pro" ? " (DOCX also available in Pro)" : ""}. Your
+                ebook has been saved to your library.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg mx-auto mb-8">
                 {[
                   { label: "Gumroad", emoji: "💰", url: "https://gumroad.com" },
@@ -2086,6 +2269,80 @@ const handleDocxExport = async () => {
                   />
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {/* Upgrade Modal */}
+        {showUpgradeModal && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowUpgradeModal(false)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900">
+                  Upgrade to Continue
+                </h3>
+                <p className="text-sm text-slate-500 mt-2">
+                  {plan === "free"
+                    ? `You've used ${usage.used}/${usage.limit} free generations this month.`
+                    : `You've reached your ${plan} plan limit.`}
+                </p>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {plan === "free" && (
+                  <div className="border-2 border-indigo-200 rounded-xl p-4 bg-indigo-50">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-indigo-900">Starter</span>
+                      <span className="text-xs font-black text-indigo-600">
+                        $9/month
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-700">
+                      15 generations/month • 6 chapters • No watermark
+                    </p>
+                  </div>
+                )}
+                <div
+                  className={`border-2 rounded-xl p-4 ${plan !== "pro" ? "border-purple-200 bg-purple-50" : "border-slate-200"}`}
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-bold text-purple-900">Pro</span>
+                    <span className="text-xs font-black text-purple-600">
+                      $19/month
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-700">
+                    50 generations/month • 12 chapters • Priority speed • DOCX
+                    export
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowUpgradeModal(false)}
+                  className="flex-1 border border-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-sm hover:bg-slate-50 transition"
+                >
+                  Maybe Later
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUpgradeModal(false);
+                    router.push("/pricing?upgrade=true");
+                  }}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-md"
+                >
+                  View Plans
+                </button>
+              </div>
             </div>
           </div>
         )}

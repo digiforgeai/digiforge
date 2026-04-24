@@ -16,17 +16,41 @@ export function createClient() {
   if (!supabaseInstance) {
     supabaseInstance = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          detectSessionInUrl: false,
+          persistSession: true,
+          flowType: 'pkce',
+        },
+      }
     )
   }
   
   return supabaseInstance
 }
 
-// Helper to check if user is logged in
+// Helper to check if user is logged in with lock error handling
 export async function getCurrentUser() {
   const supabase = createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return null
-  return user
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    
+    // Ignore lock errors
+    if (error) {
+      if (error.message?.includes('lock') || error.message?.includes('stole')) {
+        console.warn('Auth lock error ignored in getCurrentUser')
+        return null
+      }
+      return null
+    }
+    return user
+  } catch (err: any) {
+    // Ignore lock errors
+    if (err?.message?.includes('lock') || err?.message?.includes('stole')) {
+      console.warn('Auth lock error caught in getCurrentUser')
+      return null
+    }
+    throw err
+  }
 }

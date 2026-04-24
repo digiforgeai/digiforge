@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Zap, Crown, Check, ArrowRight } from 'lucide-react'
+import { X, Zap, Crown, Check, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 interface UpgradeModalProps {
@@ -13,8 +13,12 @@ interface UpgradeModalProps {
   feature?: string
 }
 
-export function UpgradeModal({ isOpen, onClose, currentPlan, remainingGenerations }: UpgradeModalProps) {
+export function UpgradeModal({ isOpen, onClose, currentPlan, remainingGenerations, feature }: UpgradeModalProps) {
   if (!isOpen) return null
+
+  // Show different content based on current plan
+  const isFree = currentPlan === 'free'
+  const isStarter = currentPlan === 'starter'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -24,51 +28,96 @@ export function UpgradeModal({ isOpen, onClose, currentPlan, remainingGeneration
         </button>
 
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Crown className="w-8 h-8 text-white" />
+          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+            isFree 
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600'
+              : 'bg-gradient-to-r from-amber-500 to-orange-500'
+          }`}>
+            {isFree ? <Crown className="w-8 h-8 text-white" /> : <Sparkles className="w-8 h-8 text-white" />}
           </div>
-          <h2 className="text-2xl font-black text-white">Upgrade to Pro</h2>
+          <h2 className="text-2xl font-black text-white">
+            {isFree ? 'Upgrade to Starter' : isStarter ? 'Upgrade to Pro' : 'Upgrade Your Plan'}
+          </h2>
           <p className="text-zinc-400 text-sm mt-2">
-            You've used {remainingGenerations === 0 ? 'all' : `${2 - remainingGenerations}`} of your free generations this month
+            {feature 
+              ? `"${feature}" requires an upgrade`
+              : remainingGenerations === 0 
+                ? `You've used all your ${currentPlan} plan generations this month`
+                : `You have ${remainingGenerations} generation${remainingGenerations !== 1 ? 's' : ''} left`}
           </p>
         </div>
 
+        {/* Comparison Bar */}
         <div className="bg-zinc-900/50 rounded-xl p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-zinc-400 text-sm">Free Plan</span>
+            <span className="text-zinc-400 text-sm capitalize">{currentPlan} Plan</span>
             <span className="text-zinc-600 text-sm">→</span>
-            <span className="text-white font-bold">Pro Plan</span>
+            <span className="text-white font-bold">{isFree ? 'Starter' : 'Pro'} Plan</span>
           </div>
           <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-            <div className="w-2/3 h-full bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full" />
+            <div className={`h-full bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full ${
+              isFree ? 'w-1/5' : 'w-1/2'
+            }`} />
           </div>
           <div className="flex justify-between text-xs text-zinc-600 mt-2">
-            <span>2 ebooks/month</span>
-            <span>30 ebooks/month</span>
+            {isFree ? (
+              <>
+                <span>5 ebooks/month</span>
+                <span>15 ebooks/month</span>
+              </>
+            ) : (
+              <>
+                <span>15 ebooks/month</span>
+                <span>50 ebooks/month</span>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Features List */}
         <div className="space-y-3 mb-6">
-          {[
-            '30 ebook generations per month',
-            'Up to 10 chapters per ebook',
-            'No watermark on exports',
-            'Priority generation speed',
-            'Premium PDF layouts',
-            'Priority support',
-          ].map((feature, i) => (
-            <div key={i} className="flex items-center gap-2 text-sm">
-              <Check className="w-4 h-4 text-emerald-500" />
-              <span className="text-zinc-300">{feature}</span>
-            </div>
-          ))}
+          {isFree ? (
+            // Free → Starter features
+            [
+              '15 ebook generations per month (vs 5 on Free)',
+              'Up to 6 chapters per ebook (vs 3 on Free)',
+              'Premium PDF layout',
+              'Chapter images included',
+              'No watermark on exports',
+              'Faster generation speed',
+              '8 accent color themes',
+            ].map((feature, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <Check className="w-4 h-4 text-emerald-500" />
+                <span className="text-zinc-300">{feature}</span>
+              </div>
+            ))
+          ) : (
+            // Starter → Pro features
+            [
+              '50 ebook generations per month (vs 15)',
+              'Up to 12 chapters per ebook (vs 6)',
+              'Priority generation speed',
+              'PDF customization (fonts & layouts)',
+              'Multiple export formats (PDF + DOCX)',
+              'AI cover image generation',
+              'Priority support',
+              'Unlimited regenerations (free)'
+            ].map((feature, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <Check className="w-4 h-4 text-emerald-500" />
+                <span className="text-zinc-300">{feature}</span>
+              </div>
+            ))
+          )}
         </div>
 
+        {/* CTA Button */}
         <Link
           href="/pricing"
           className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 hover:shadow-lg transition"
         >
-          Upgrade to Pro - $19/month
+          {isFree ? 'Upgrade to Starter - $9/month' : isStarter ? 'Upgrade to Pro - $19/month' : 'View Pricing'}
           <ArrowRight className="w-4 h-4" />
         </Link>
 

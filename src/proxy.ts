@@ -76,7 +76,7 @@ export async function proxy(request: NextRequest) {
       .select('plan_id, status')
       .eq('user_id', user.id)
       .eq('status', 'active')
-      .order('created_at', { ascending: false })
+      .order('generated_at', { ascending: false })
       .limit(1)
       .single()
 
@@ -120,30 +120,30 @@ if (pathname === '/api/generate' && user) {
   const planId = userPlan?.plan_id || 'free'
   
   
-  if (planId === 'free') {
-    const startOfMonth = new Date()
-    startOfMonth.setDate(1)
-    startOfMonth.setHours(0, 0, 0, 0)
+if (planId === 'free') {
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+  
+  const { count } = await supabase
+    .from('generated_ebooks')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('generated_at', startOfMonth.toISOString())
     
-    const { count } = await supabase
-      .from('generated_ebooks')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', startOfMonth.toISOString())
-        
-    if (count && count >= 2) {
-      console.log(`❌ [PROXY] Blocking free user - count ${count} >= 2`)
-      return NextResponse.json(
-        { 
-          error: 'monthly_limit_reached',
-          message: 'You have reached your monthly limit of 2 free ebooks...',
-          limit: 2,
-          used: count,
-        },
-        { status: 429 }
-      )
-    }
+  if (count && count >= 5) {  // ← Changed from 2 to 5
+    console.log(`❌ [PROXY] Blocking free user - count ${count} >= 5`)  // ← Updated message
+    return NextResponse.json(
+      { 
+        error: 'monthly_limit_reached',
+        message: 'You have reached your monthly limit of 5 free ebooks. Upgrade to Starter for 15 generations per month!',
+        limit: 5,  // ← Changed from 2 to 5
+        used: count,
+      },
+      { status: 429 }
+    )
   }
+}
 }
 
   // ========== SECURITY HEADERS ==========

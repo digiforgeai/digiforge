@@ -3,7 +3,7 @@ export type PlanId = 'free' | 'starter' | 'pro'
 
 export const PLAN_LIMITS = {
   free: {
-    ebookGenerationsPerMonth: 2,
+    ebookGenerationsPerMonth: 5,
     maxChapters: 3,
     maxImagesPerEbook: 0,
     prioritySpeed: false,
@@ -12,7 +12,7 @@ export const PLAN_LIMITS = {
     trendingIdeas: 'basic' as const,
   },
   starter: {
-    ebookGenerationsPerMonth: 10,
+    ebookGenerationsPerMonth: 15,
     maxChapters: 6,
     maxImagesPerEbook: 6,
     prioritySpeed: false,
@@ -21,8 +21,8 @@ export const PLAN_LIMITS = {
     trendingIdeas: 'basic' as const,
   },
   pro: {
-    ebookGenerationsPerMonth: 30,
-    maxChapters: 10,
+    ebookGenerationsPerMonth: 50,
+    maxChapters: 12,
     maxImagesPerEbook: 12,
     prioritySpeed: true,
     watermark: false,

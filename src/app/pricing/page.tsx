@@ -9,7 +9,6 @@ import { createClient } from '@/lib/supabase/client'
 import { PLANS, type PlanId } from '@/lib/pricing/types'
 
 export default function PricingPage() {
-  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month')
   const [currentPlan, setCurrentPlan] = useState<PlanId | null>(null)
   const [showComparison, setShowComparison] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -89,6 +88,7 @@ export default function PricingPage() {
         'Premium PDF layout',
         'Chapter images included',
         'Priority generation speed',
+        'Unlimited regenerations (free)',
         'PDF customization (fonts, layouts)',
         'Multiple export formats (PDF + DOCX)',
         'Cover image generation',
@@ -103,17 +103,11 @@ export default function PricingPage() {
     },
   ]
 
-  const getYearlyPrice = (monthlyPrice: number) => {
-    if (monthlyPrice === 0) return '$0'
-    const yearly = Math.round(monthlyPrice * 12 * 0.8)
-    return `$${yearly}`
-  }
-
   // Updated comparison table
   const comparisonFeatures = [
-    { name: 'Monthly ebook generations', free: '2', starter: '15', pro: '50' },
+    { name: 'Monthly ebook generations', free: '5', starter: '15', pro: '50' },
     { name: 'Max chapters per ebook', free: '3', starter: '6', pro: '12' },
-    { name: 'PDF templates', free: '2', starter: '3', pro: '5+' },
+    { name: 'PDF templates', free: '2', starter: '4', pro: '5+' },
     { name: 'Accent color themes', free: '8', starter: '8', pro: '8' },
     { name: 'Unsplash cover images', free: '✅', starter: '✅', pro: '✅' },
     { name: 'AI trend scoring', free: '✅', starter: '✅', pro: '✅' },
@@ -124,8 +118,9 @@ export default function PricingPage() {
     { name: 'PDF customization (fonts/layouts)', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Multiple export formats', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Cover image generation', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'Unlimited regenerations', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Commercial use rights', free: '✅', starter: '✅', pro: '✅' },
-  { name: 'Support', free: 'Community', starter: 'Standard', pro: 'Priority' },  // ← Professional
+  { name: 'Customer Support', free: 'Community', starter: 'Standard', pro: 'Priority' },  // ← Professional
   ]
 
   return (
@@ -191,25 +186,6 @@ export default function PricingPage() {
           <p className="text-zinc-400 text-base md:text-lg max-w-xl mx-auto px-4">
             Start free. Upgrade when you're ready to scale. Cancel anytime.
           </p>
-
-          {/* Billing Toggle */}
-          <div className="flex items-center justify-center gap-3 md:gap-4 mt-6 md:mt-8">
-            <span className={`text-xs md:text-sm font-bold transition ${billingInterval === 'month' ? 'text-white' : 'text-zinc-600'}`}>
-              Monthly
-            </span>
-            <button
-              onClick={() => setBillingInterval(billingInterval === 'month' ? 'year' : 'month')}
-              className="relative w-12 md:w-14 h-6 md:h-7 bg-zinc-700 rounded-full transition-colors duration-300 focus:outline-none"
-            >
-              <div className={`absolute top-1 w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${billingInterval === 'year' ? 'translate-x-7 md:translate-x-8 bg-indigo-500' : 'translate-x-1'}`} />
-            </button>
-            <span className={`text-xs md:text-sm font-bold transition ${billingInterval === 'year' ? 'text-white' : 'text-zinc-600'}`}>
-              Yearly
-              <span className="ml-1.5 text-[10px] md:text-xs text-emerald-500 font-bold bg-emerald-500/10 px-1.5 md:px-2 py-0.5 rounded-full">
-                Save 20%
-              </span>
-            </span>
-          </div>
         </div>
       </section>
 
@@ -218,8 +194,8 @@ export default function PricingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
           {plansForDisplay.map((plan) => {
             const isCurrentPlan = currentPlan === plan.id
-            const displayPrice = billingInterval === 'year' && plan.price !== 0 ? getYearlyPrice(plan.price) : `$${plan.price}`
-            const displayPeriod = billingInterval === 'year' ? '/year' : '/month'
+            const displayPrice = plan.price === 0 ? 'Free' : `$${plan.price}`
+const displayPeriod = plan.price === 0 ? '' : '/month'
             const isFree = plan.price === 0
             
             return (
