@@ -3,7 +3,7 @@
 import {
   Zap, LayoutDashboard, Lightbulb, BookMarked,
   LogOut, Menu, X, ChevronRight, Rocket, ArrowRight,
-  Library, Sparkles, TrendingUp, Star, Settings
+  Library, Sparkles, TrendingUp, Star, Settings, Activity
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -98,10 +98,11 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
   const router = useRouter()
   const supabase = createClient()
   const [profile, setProfile] = useState({ name: 'User', email: '', avatar: '' })
-  const [ebookCount, setEbookCount] = useState(0)
+  const [usage, setUsage] = useState({ used: 0, limit: 15, plan: 'starter', remaining: 15 })
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchUser() {
+    async function fetchUserData() {
       try {
         const { data: { user }, error } = await supabase.auth.getUser()
         
@@ -111,19 +112,50 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
         }
         
         if (user) {
+          // Get profile data
           const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+          
+          // Get user plan
+          const { data: planData } = await supabase
+            .from('user_plans')
+            .select('plan_id')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .single()
+          
+          const plan = planData?.plan_id || 'starter'
+          
+          // Set limits based on plan
+          let limit = 15 // starter default
+          if (plan === 'free') limit = 5
+          if (plan === 'pro') limit = 50
+          
+          // Get generations used this month
+          const startOfMonth = new Date()
+          startOfMonth.setDate(1)
+          startOfMonth.setHours(0, 0, 0, 0)
+          
           const { count } = await supabase
             .from('generated_ebooks')
             .select('id', { count: 'exact', head: true })
             .eq('user_id', user.id)
-            .eq('deleted', false)
+            .gte('generated_at', startOfMonth.toISOString())
+          
+          const used = count || 0
+          const remaining = Math.max(0, limit - used)
           
           setProfile({
             name: data?.full_name || user.email?.split('@')[0] || 'User',
             email: user.email || '',
             avatar: data?.avatar_url || ''
           })
-          setEbookCount(count || 0)
+          
+          setUsage({
+            used: used,
+            limit: limit,
+            plan: plan,
+            remaining: remaining
+          })
         }
       } catch (err: any) {
         if (err?.message?.includes("lock") || err?.message?.includes("stole")) {
@@ -131,9 +163,11 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
           return
         }
         console.error("Failed to fetch user:", err)
+      } finally {
+        setLoading(false)
       }
     }
-    fetchUser()
+    fetchUserData()
   }, [])
 
   const handleLogout = async () => {
@@ -142,6 +176,28 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
     sessionStorage.clear()
     await supabase.auth.signOut()
     window.location.href = '/login'
+  }
+
+  const getUsageText = () => {
+    if (usage.remaining === 0) {
+      return "⚠️ No generations left this month"
+    }
+    if (usage.remaining <= 3) {
+      return `⚡ ${usage.remaining} generation${usage.remaining !== 1 ? 's' : ''} left`
+    }
+    return `${usage.used}/${usage.limit} used this month`
+  }
+
+  const getBorderColor = () => {
+    if (usage.remaining === 0) return 'border-amber-500/30 bg-amber-500/5'
+    if (usage.remaining <= 3) return 'border-amber-500/20 bg-amber-500/5'
+    return 'border-indigo-500/20 bg-indigo-500/5'
+  }
+
+  const getTextColor = () => {
+    if (usage.remaining === 0) return 'text-amber-400'
+    if (usage.remaining <= 3) return 'text-amber-400'
+    return 'text-indigo-400'
   }
 
   return (
@@ -161,37 +217,71 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
 
       <NavLinks pathname={pathname} onClose={onClose} />
 
-      {/* Upgrade Card - Premium Design (Fixed) */}
-      <div className="mx-3 my-3 relative overflow-hidden rounded-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 opacity-90" />
-        {/* Fixed: Removed the problematic SVG data URL */}
-        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(white,transparent_50%)]" />
-        
-        <div className="relative z-10 p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-            <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Limited Offer</span>
-          </div>
-          <p className="text-[11px] text-white/90 leading-relaxed mb-2 font-medium">
-            {ebookCount === 0 
-              ? "Generate your first digital product today. Free!"
-              : `You've created ${ebookCount} ${ebookCount === 1 ? 'ebook' : 'ebooks'}! Upgrade for more features.`
-            }
-          </p>
-          <Link 
-            href="/dashboard/generate" 
-            onClick={onClose} 
-            className="flex items-center justify-between w-full bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl px-3 py-2 transition-all group"
-          >
-            <span className="text-[10px] font-black text-white uppercase tracking-wide">
-              {ebookCount === 0 ? 'Start Forging' : 'Upgrade Now'}
-            </span>
-            <ArrowRight className="w-3.5 h-3.5 text-white group-hover:translate-x-1 transition-transform" />
-          </Link>
+      {/* Monthly Usage - Simple Text Card */}
+      {/* <div className={`mx-3 my-2 rounded-xl border ${getBorderColor()} p-3`}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <Activity className={`w-3 h-3 ${getTextColor()}`} />
+          <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Monthly Usage</span>
         </div>
-      </div>
+        <p className={`text-xs font-medium ${getTextColor()}`}>
+          {getUsageText()}
+        </p>
+        <p className="text-[8px] text-slate-500 mt-1">
+          {usage.plan === 'free' && 'Free: 5/month'}
+          {usage.plan === 'starter' && 'Starter: 15/month'}
+          {usage.plan === 'pro' && 'Pro: 50/month • Unlimited'}
+        </p>
+        {usage.remaining <= 3 && usage.plan !== 'pro' && (
+          <Link 
+            href="/pricing" 
+            className="flex items-center justify-between w-full mt-2 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg px-2 py-1 transition-all group"
+          >
+            <span className="text-[7px] font-black text-amber-400 uppercase tracking-wide">
+              {usage.remaining === 0 ? 'Upgrade to continue' : 'Low on credits'}
+            </span>
+            <ArrowRight className="w-2 h-2 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        )}
+      </div> */}
 
-      {/* User Profile Section - Premium */}
+      {/* Upgrade Card - Only show for non-pro users or when low on credits */}
+      {(usage.plan !== 'pro' || usage.remaining <= 3) && (
+        <div className="mx-3 my-2 relative overflow-hidden rounded-xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 opacity-90" />
+          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(white,transparent_50%)]" />
+          
+          <div className="relative z-10 p-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Sparkles className="w-3 h-3 text-yellow-300 animate-pulse" />
+              <span className="text-[7px] font-black text-white uppercase tracking-[0.2em]">
+                {usage.plan === 'pro' ? 'Pro Member ✓' : 'Upgrade Available'}
+              </span>
+            </div>
+            <p className="text-[9px] text-white/90 leading-relaxed mb-1.5 font-medium">
+              {usage.plan === 'pro' 
+                ? '✨ You have unlimited access to all features'
+                : usage.remaining === 0
+                  ? `You've used all ${usage.limit} generations this month`
+                  : `${usage.remaining} generation${usage.remaining !== 1 ? 's' : ''} remaining`
+              }
+            </p>
+            {usage.plan !== 'pro' && (
+              <Link 
+                href="/pricing" 
+                onClick={onClose} 
+                className="flex items-center justify-between w-full bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1 transition-all group"
+              >
+                <span className="text-[7px] font-black text-white uppercase tracking-wide">
+                  {usage.remaining === 0 ? 'Upgrade Now' : 'Upgrade to Pro'}
+                </span>
+                <ArrowRight className="w-2 h-2 text-white group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* User Profile Section */}
       <div className="px-3 pb-4 mt-auto">
         <div className="pt-4 border-t border-white/[0.05]">
           <Link 
