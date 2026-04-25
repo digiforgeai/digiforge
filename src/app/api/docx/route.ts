@@ -1,11 +1,10 @@
-// app/api/docx/route.ts - PREMIUM DOCX EXPORT (PRO ONLY - NO BRANDING)
+// app/api/docx/route.ts - PREMIUM DOCX EXPORT (PRO ONLY - FULLY POLISHED)
 import { NextResponse } from "next/server";
 import {
   Document,
   Packer,
   Paragraph,
   TextRun,
-  HeadingLevel,
   AlignmentType,
   BorderStyle,
 } from "docx";
@@ -22,6 +21,8 @@ const clean = (t: string) =>
     .replace(/\r/g, "")
     .replace(/\u00A0/g, " ")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\\n\\n/g, "\n\n")
+    .replace(/\\\\n/g, "\n")
     .replace(/[^\x00-\x7F]/g, (c: string) =>
       ({
         "\u2018": "'",
@@ -65,56 +66,86 @@ const THEMES: Record<string, string> = {
   slate: "38465c",
 };
 
-// ── SPLIT INTO PARAGRAPHS ──
+// ── TEMPLATE STYLES FOR DOCX ──
+const TEMPLATE_DOCX_STYLES: Record<string, any> = {
+  classic: {
+    titleSize: 44,
+    headingSize: 28,
+    bodySize: 24,
+    fontFamily: "Times New Roman",
+    titleColor: "1a1a1a",
+    showDecorations: true,
+  },
+  modern: {
+    titleSize: 48,
+    headingSize: 30,
+    bodySize: 24,
+    fontFamily: "Arial",
+    titleColor: "4c29d1",
+    showDecorations: true,
+  },
+  premium: {
+    titleSize: 52,
+    headingSize: 32,
+    bodySize: 24,
+    fontFamily: "Georgia",
+    titleColor: "c49a45",
+    showDecorations: true,
+  },
+  minimal: {
+    titleSize: 36,
+    headingSize: 22,
+    bodySize: 22,
+    fontFamily: "Calibri",
+    titleColor: "333333",
+    showDecorations: false,
+  },
+  editorial: {
+    titleSize: 56,
+    headingSize: 34,
+    bodySize: 24,
+    fontFamily: "Garamond",
+    titleColor: "8B0000",
+    showDecorations: true,
+  },
+  corporate: {
+    titleSize: 42,
+    headingSize: 26,
+    bodySize: 23,
+    fontFamily: "Calibri",
+    titleColor: "0a2540",
+    showDecorations: false,
+  },
+};
+
+function getLightColor(hex: string, percent: number = 0.9): string {
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const lightR = Math.min(255, Math.floor(r + (255 - r) * percent));
+  const lightG = Math.min(255, Math.floor(g + (255 - g) * percent));
+  const lightB = Math.min(255, Math.floor(b + (255 - b) * percent));
+  return `${lightR.toString(16).padStart(2, '0')}${lightG.toString(16).padStart(2, '0')}${lightB.toString(16).padStart(2, '0')}`;
+}
+
 function splitIntoParagraphs(text: string): string[] {
   const cleaned = clean(text);
   const sentences = cleaned.match(/[^.!?]+[.!?]+["']?\s*/g) || [cleaned];
   const paragraphs: string[] = [];
   let current = "";
-
   for (const sentence of sentences) {
-    if ((current + sentence).length > 300 && current.length > 0) {
+    if ((current + sentence).length > 400 && current.length > 0) {
       paragraphs.push(current.trim());
       current = sentence;
     } else {
       current += sentence;
     }
   }
-  if (current.trim().length > 0) {
-    paragraphs.push(current.trim());
-  }
+  if (current.trim().length > 0) paragraphs.push(current.trim());
   return paragraphs;
 }
 
-
-// Create a lighter version function at the top
-function getLightColor(hex: string): string {
-  // Convert hex to RGB, lighten it, then back to hex
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  
-  // Lighten by 70%
-  const lightR = Math.min(255, Math.floor(r + (255 - r) * 0.85));
-  const lightG = Math.min(255, Math.floor(g + (255 - g) * 0.85));
-  const lightB = Math.min(255, Math.floor(b + (255 - b) * 0.85));
-  
-  return `${lightR.toString(16).padStart(2, '0')}${lightG.toString(16).padStart(2, '0')}${lightB.toString(16).padStart(2, '0')}`;
-}
-
-// ── CREATE STYLED PARAGRAPH ──
-function createStyledParagraph(
-  text: string,
-  options: {
-    bold?: boolean;
-    size?: number;
-    color?: string;
-    spacing?: number;
-    indent?: number;
-    alignment?: any;
-    italic?: boolean;
-  } = {},
-): Paragraph {
+function createStyledParagraph(text: string, options: any = {}): Paragraph {
   const {
     bold = false,
     size = 24,
@@ -123,53 +154,31 @@ function createStyledParagraph(
     indent = 0,
     alignment = AlignmentType.LEFT,
     italic = false,
+    fontFamily = "Calibri",
   } = options;
 
   const cleaned = clean(text);
   if (!cleaned) return new Paragraph({});
 
-  // Handle bullet points with fancy styling
-  if (cleaned.startsWith("✓") || cleaned.startsWith("-") || cleaned.startsWith("•")) {
-    return new Paragraph({
-      children: [
-        new TextRun({
-          text: "▸",
-          bold: true,
-          size: size,
-          color: "4c29d1",
-        }),
-        new TextRun({
-          text: " " + cleaned.substring(1).trim(),
-          bold,
-          size,
-          color,
-          italics: italic,
-        }),
-      ],
-      spacing: { line: spacing, after: 120 },
-      indent: { left: indent * 720 },
-    });
-  }
+  const textRun = new TextRun({
+    text: cleaned,
+    bold,
+    size,
+    color,
+    italics: italic,
+    font: fontFamily,
+  });
 
   return new Paragraph({
-    children: [
-      new TextRun({
-        text: cleaned,
-        bold,
-        size,
-        color,
-        italics: italic,
-      }),
-    ],
-    spacing: { line: spacing, after: 200 },
+    children: [textRun],
+    spacing: { line: spacing, after: 120 },
     indent: { left: indent * 720, firstLine: indent > 0 ? 360 : 0 },
     alignment,
   });
 }
 
-// ── CREATE HEADING ──
-function createHeading(text: string, level: number, accentColor: string): Paragraph {
-  const sizes = { 1: 44, 2: 32, 3: 26, 4: 22 };
+function createHeading(text: string, level: number, accentColor: string, templateStyle: any): Paragraph {
+  const sizes = { 1: templateStyle.headingSize, 2: 28, 3: 24, 4: 20 };
   const size = sizes[level as keyof typeof sizes] || 24;
 
   const heading = new Paragraph({
@@ -179,13 +188,13 @@ function createHeading(text: string, level: number, accentColor: string): Paragr
         bold: true,
         size,
         color: level === 1 ? accentColor : "1a1a1a",
+        font: templateStyle.fontFamily,
       }),
     ],
-    spacing: { before: level === 1 ? 600 : 400, after: level === 1 ? 300 : 200 },
+    spacing: { before: level === 1 ? 400 : 300, after: level === 1 ? 200 : 120 },
   });
 
-  // Add decorative line for level 1 headings
-  if (level === 1) {
+  if (level === 1 && templateStyle.showDecorations) {
     return new Paragraph({
       children: [
         new TextRun({
@@ -193,108 +202,74 @@ function createHeading(text: string, level: number, accentColor: string): Paragr
           bold: true,
           size,
           color: accentColor,
+          font: templateStyle.fontFamily,
         }),
       ],
-      spacing: { before: 600, after: 200 },
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 2, color: accentColor },
-      },
+      spacing: { before: 400, after: 200 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: accentColor } },
     });
   }
-
   return heading;
 }
 
-// ── CREATE PREMIUM TIP BOX ──
-function createTipBox(tips: string[], accentColor: string): Paragraph[] {
+function createTipBox(tips: string[], accentColor: string, templateStyle: any): Paragraph[] {
   const paragraphs: Paragraph[] = [];
-
-  // Spacing before
-  paragraphs.push(new Paragraph({ spacing: { before: 300 } }));
-
-  // Header with icon
+  paragraphs.push(new Paragraph({ spacing: { before: 200 } }));
   paragraphs.push(
     new Paragraph({
       children: [
         new TextRun({
-          text: "★ KEY INSIGHTS ★",
+          text: "◆ KEY INSIGHTS ◆",
           bold: true,
-          size: 22,
+          size: 20,
           color: accentColor,
+          font: templateStyle.fontFamily,
         }),
       ],
-      spacing: { after: 100 },
+      spacing: { after: 80 },
     }),
   );
-
-  // Decorative line
   paragraphs.push(
     new Paragraph({
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: accentColor },
-      },
-      spacing: { after: 200 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: accentColor } },
+      spacing: { after: 120 },
     }),
   );
-
-  // Tips with custom bullets
   for (const tip of tips.slice(0, 6)) {
     if (tip && tip.length > 10) {
       paragraphs.push(
         new Paragraph({
           children: [
-            new TextRun({
-              text: "◆",
-              bold: true,
-              size: 20,
-              color: accentColor,
-            }),
-            new TextRun({
-              text: "  " + clean(tip),
-              size: 23,
-              color: "444444",
-            }),
+            new TextRun({ text: "•", bold: true, size: 18, color: accentColor }),
+            new TextRun({ text: "  " + clean(tip), size: 22, color: "444444", font: templateStyle.fontFamily }),
           ],
-          spacing: { after: 120 },
+          spacing: { after: 80 },
           indent: { left: 360 },
         }),
       );
     }
   }
-
-  // Spacing after
-  paragraphs.push(new Paragraph({ spacing: { after: 300 } }));
-
+  paragraphs.push(new Paragraph({ spacing: { after: 200 } }));
   return paragraphs;
 }
 
-// ── CREATE MODERN HEADER (for each page) - Optional but cool ──
-function createChapterHeader(num: number, title: string, accentColor: string): Paragraph {
-  return new Paragraph({
-    children: [
-      new TextRun({
-        text: `${String(num).padStart(2, "0")}`,
-        bold: true,
-        size: 120,
-        color: `${accentColor}20`, // 20% opacity (hex + alpha)
-      }),
-      new TextRun({
-        text: `\n${clean(title)}`,
-        bold: true,
-        size: 32,
-        color: "1a1a1a",
-      }),
-    ],
-    spacing: { before: 400, after: 200 },
-  });
+async function fetchUserProfile(supabase: any, userId: string) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", userId)
+    .single();
+  if (profile?.full_name && profile.full_name.trim().length > 0) {
+    return profile.full_name;
+  }
+  return null;
 }
 
 // ── MAIN EXPORT ──
 export async function POST(req: Request) {
   try {
-    const { content, title, theme = "indigo" } = await req.json();
+    const { content, title, theme = "indigo", template = "premium" } = await req.json();
 
-    // ── PRO PLAN CHECK ──
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -310,290 +285,304 @@ export async function POST(req: Request) {
     }
 
     if (userPlan !== "pro") {
-      return NextResponse.json(
-        {
-          error: "plan_restricted",
-          message: "DOCX export requires a Pro plan.",
-        },
-        { status: 403 },
-      );
+      return NextResponse.json({ error: "plan_restricted", message: "DOCX export requires a Pro plan." }, { status: 403 });
     }
 
+    const userFullName = await fetchUserProfile(supabase, user!.id);
     const accentColor = THEMES[theme] || THEMES.indigo;
-    console.log(`📄 DOCX Export: Pro user, theme: ${theme}`);
+    const templateStyle = TEMPLATE_DOCX_STYLES[template] || TEMPLATE_DOCX_STYLES.premium;
+    console.log(`📄 DOCX Export: ${template} template, theme: ${theme}`);
 
     const sections: any[] = [];
+    let currentPage = 2; // Track page numbers for TOC
 
     // ═══════════════════════════════════════════════════════════════
-    // COVER SECTION - PREMIUM LAYOUT
+    // COVER SECTION
     // ═══════════════════════════════════════════════════════════════
     const coverParagraphs: Paragraph[] = [];
-
-    // Large accent bar at top
+    
+    if (templateStyle.showDecorations) {
+      coverParagraphs.push(new Paragraph({ 
+        border: { top: { style: BorderStyle.SINGLE, size: 4, color: accentColor } }, 
+        spacing: { before: 300, after: 300 } 
+      }));
+    }
+    
     coverParagraphs.push(
       new Paragraph({
-        border: {
-          top: { style: BorderStyle.SINGLE, size: 6, color: accentColor },
-        },
-        spacing: { before: 400, after: 400 },
-      }),
-    );
-
-    // Main title
-    coverParagraphs.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: clean(title || content?.title || "Untitled"),
-            bold: true,
-            size: 52,
-            color: accentColor,
-          }),
-        ],
+        children: [new TextRun({ 
+          text: clean(title || content?.title || "Untitled"), 
+          bold: true, 
+          size: templateStyle.titleSize, 
+          color: templateStyle.titleColor, 
+          font: templateStyle.fontFamily 
+        })],
         alignment: AlignmentType.CENTER,
         spacing: { before: 400, after: 200 },
-      }),
+      })
     );
-
-    // Subtitle
+    
     if (content?.subtitle) {
       coverParagraphs.push(
-        createStyledParagraph(content.subtitle, {
-          size: 28,
-          color: "666666",
-          alignment: AlignmentType.CENTER,
-          italic: true,
-        }),
+        createStyledParagraph(content.subtitle, { 
+          size: 26, 
+          color: "666666", 
+          alignment: AlignmentType.CENTER, 
+          italic: true, 
+          fontFamily: templateStyle.fontFamily 
+        })
       );
     }
-
-    // Decorative divider
-    coverParagraphs.push(
-      new Paragraph({
-        border: {
-          bottom: { style: BorderStyle.SINGLE, size: 1, color: accentColor },
-        },
-        spacing: { before: 300, after: 300 },
-      }),
-    );
-
-    // Metadata (NO BRANDING - just date and chapter count)
+    
+    if (templateStyle.showDecorations) {
+      coverParagraphs.push(new Paragraph({ 
+        border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: accentColor } }, 
+        spacing: { before: 200, after: 200 } 
+      }));
+    }
+    
     const chapterCount = content?.chapters?.length || 0;
     coverParagraphs.push(
-      createStyledParagraph(`${chapterCount} CHAPTERS  |  ${new Date().getFullYear()}`, {
-        size: 20,
-        color: "999999",
-        alignment: AlignmentType.CENTER,
-      }),
+      createStyledParagraph(`${chapterCount} CHAPTERS  |  ${new Date().getFullYear()}`, { 
+        size: 18, 
+        color: "999999", 
+        alignment: AlignmentType.CENTER, 
+        fontFamily: templateStyle.fontFamily 
+      })
     );
-
-    // Bottom accent bar
-    coverParagraphs.push(
-      new Paragraph({
-        border: {
-          bottom: { style: BorderStyle.SINGLE, size: 2, color: accentColor },
-        },
-        spacing: { before: 400, after: 200 },
-      }),
-    );
-
+    
+    if (userFullName) {
+      coverParagraphs.push(
+        createStyledParagraph(`Created by ${userFullName}`, { 
+          size: 16, 
+          color: "aaaaaa", 
+          alignment: AlignmentType.CENTER, 
+          italic: true, 
+          fontFamily: templateStyle.fontFamily 
+        })
+      );
+    }
+    
+    if (templateStyle.showDecorations) {
+      coverParagraphs.push(new Paragraph({ 
+        border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: accentColor } }, 
+        spacing: { before: 300, after: 100 } 
+      }));
+    }
+    
     sections.push({ children: coverParagraphs });
     sections.push({ children: [new Paragraph({ pageBreakBefore: true })] });
 
     // ═══════════════════════════════════════════════════════════════
-    // TABLE OF CONTENTS - CLEAN & PROFESSIONAL
+    // TABLE OF CONTENTS - PROPERLY ALIGNED
     // ═══════════════════════════════════════════════════════════════
     const tocParagraphs: Paragraph[] = [];
-
+    
+    tocParagraphs.push(new Paragraph({ 
+      children: [new TextRun({ text: "CONTENTS", bold: true, size: 38, color: accentColor, font: templateStyle.fontFamily })], 
+      alignment: AlignmentType.CENTER, 
+      spacing: { before: 300, after: 300 } 
+    }));
+    
+    // TOC Header
     tocParagraphs.push(
       new Paragraph({
         children: [
-          new TextRun({
-            text: "CONTENTS",
-            bold: true,
-            size: 40,
-            color: accentColor,
-          }),
+          new TextRun({ text: "Section", bold: true, size: 20, color: accentColor, font: templateStyle.fontFamily }),
+          new TextRun({ text: " ", size: 20 }),
+          new TextRun({ text: "Page", bold: true, size: 20, color: accentColor, font: templateStyle.fontFamily }),
         ],
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 400, after: 400 },
-      }),
+        spacing: { after: 80 },
+      })
     );
-
+    
+    tocParagraphs.push(new Paragraph({ 
+      border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: accentColor } }, 
+      spacing: { after: 100 } 
+    }));
+    
     const tocItems = [
-      { title: "Introduction", page: 3 },
-      ...(content?.chapters?.map((ch: any, i: number) => ({
-        title: `Chapter ${i + 1}: ${ch?.title || ""}`,
-        page: i + 4,
+      { title: "Introduction", page: currentPage++ },
+      ...(content?.chapters?.map((ch: any, i: number) => ({ 
+        title: ch?.title || `Chapter ${i + 1}`, 
+        page: currentPage++ 
       })) || []),
-      { title: "Conclusion", page: (content?.chapters?.length || 0) + 4 },
+      { title: "Conclusion", page: currentPage++ },
     ];
-
+    
     for (let i = 0; i < tocItems.length; i++) {
       const item = tocItems[i];
+      const titleText = clean(item.title);
+      const titleLength = titleText.length;
+      const dotsCount = Math.max(1, 50 - titleLength);
+      const dots = ".".repeat(dotsCount);
+      
       tocParagraphs.push(
         new Paragraph({
           children: [
-            new TextRun({
-              text: clean(item.title),
-              size: 24,
-              color: i === 0 ? accentColor : "444444",
-              bold: i === 0,
-            }),
-            new TextRun({
-              text: " ............................................ ",
-              size: 24,
-              color: "cccccc",
-              bold: false,
-            }),
-            new TextRun({
-              text: String(item.page),
-              size: 24,
-              color: accentColor,
-              bold: true,
-            }),
+            new TextRun({ text: titleText, size: 22, color: i === 0 ? accentColor : "333333", bold: i === 0, font: templateStyle.fontFamily }),
+            new TextRun({ text: dots, size: 22, color: "cccccc", font: templateStyle.fontFamily }),
+            new TextRun({ text: String(item.page), size: 22, color: accentColor, bold: true, font: templateStyle.fontFamily }),
           ],
-          spacing: { after: 120 },
-        }),
+          spacing: { after: 60 },
+        })
       );
     }
-
+    
     sections.push({ children: tocParagraphs });
     sections.push({ children: [new Paragraph({ pageBreakBefore: true })] });
 
     // ═══════════════════════════════════════════════════════════════
-    // INTRODUCTION
+    // INTRODUCTION - NO PAGE BREAK AFTER
     // ═══════════════════════════════════════════════════════════════
     const introParagraphs: Paragraph[] = [];
-
-    introParagraphs.push(createHeading("INTRODUCTION", 1, accentColor));
+    introParagraphs.push(createHeading("INTRODUCTION", 1, accentColor, templateStyle));
     
     const introTexts = splitIntoParagraphs(content?.introduction || "");
     for (let i = 0; i < introTexts.length; i++) {
       introParagraphs.push(
-        createStyledParagraph(introTexts[i], {
-          size: 24,
-          bold: i === 0,
-          indent: 0.2,
-        }),
+        createStyledParagraph(introTexts[i], { 
+          size: templateStyle.bodySize, 
+          bold: i === 0, 
+          indent: 0.2, 
+          fontFamily: templateStyle.fontFamily 
+        })
       );
     }
-
+    
     sections.push({ children: introParagraphs });
-    sections.push({ children: [new Paragraph({ pageBreakBefore: true })] });
 
     // ═══════════════════════════════════════════════════════════════
-    // CHAPTERS - PREMIUM
+    // CHAPTERS - NO EXTRA PAGE BREAKS BETWEEN CHAPTERS
     // ═══════════════════════════════════════════════════════════════
     for (let i = 0; i < (content?.chapters?.length || 0); i++) {
       const chapter = content.chapters[i];
-      const chapterTitle = clean(chapter?.title || `Chapter ${i + 1}`);
       const chapterParagraphs: Paragraph[] = [];
-
-      // Modern header with large background number
-      const lightColor = getLightColor(accentColor);
+      
+      // Add page break BEFORE each chapter (except first, which follows intro)
+      if (i > 0) {
+        chapterParagraphs.push(new Paragraph({ pageBreakBefore: true }));
+      }
+      
+      const lightColor = getLightColor(accentColor, 0.92);
       chapterParagraphs.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: `${String(i + 1).padStart(2, "0")}`,
-              bold: true,
-              size: 160,
-              color: lightColor, // Very light opacity
-            }),
-          ],
-          spacing: { before: 200, after: -280 },
-        }),
+          children: [new TextRun({ 
+            text: `${String(i + 1).padStart(2, "0")}`, 
+            bold: true, 
+            size: 140, 
+            color: lightColor, 
+            font: templateStyle.fontFamily 
+          })],
+          spacing: { before: 100, after: -240 },
+        })
       );
-
+      
       chapterParagraphs.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: `CHAPTER ${String(i + 1).padStart(2, "0")}`,
-              bold: true,
-              size: 18,
-              color: accentColor,
-            }),
-          ],
-          spacing: { after: 100 },
-        }),
+        new Paragraph({ 
+          children: [new TextRun({ 
+            text: `CHAPTER ${String(i + 1).padStart(2, "0")}`, 
+            bold: true, 
+            size: 16, 
+            color: accentColor, 
+            font: templateStyle.fontFamily 
+          })], 
+          spacing: { after: 60 } 
+        })
       );
-
-      chapterParagraphs.push(
-        createHeading(chapterTitle, 1, accentColor),
-      );
-
-      // Chapter content
+      
+      chapterParagraphs.push(createHeading(chapter?.title || `Chapter ${i + 1}`, 1, accentColor, templateStyle));
+      
       const chapterTexts = splitIntoParagraphs(chapter?.content || "");
-      for (let j = 0; j < chapterTexts.length; j++) {
+      for (const text of chapterTexts) {
         chapterParagraphs.push(
-          createStyledParagraph(chapterTexts[j], {
-            size: 24,
-            indent: 0.2,
-          }),
+          createStyledParagraph(text, { 
+            size: templateStyle.bodySize, 
+            indent: 0.2, 
+            fontFamily: templateStyle.fontFamily 
+          })
         );
       }
-
-      // Tips section
+      
       if (chapter?.tips?.length > 0) {
-        chapterParagraphs.push(...createTipBox(chapter.tips, accentColor));
+        chapterParagraphs.push(...createTipBox(chapter.tips, accentColor, templateStyle));
       }
-
+      
       sections.push({ children: chapterParagraphs });
-      sections.push({ children: [new Paragraph({ pageBreakBefore: true })] });
     }
 
     // ═══════════════════════════════════════════════════════════════
     // CONCLUSION
     // ═══════════════════════════════════════════════════════════════
     const conclusionParagraphs: Paragraph[] = [];
-
-    conclusionParagraphs.push(createHeading("CONCLUSION", 1, accentColor));
+    conclusionParagraphs.push(createHeading("CONCLUSION", 1, accentColor, templateStyle));
     
     const conclusionTexts = splitIntoParagraphs(content?.conclusion || "");
     for (const text of conclusionTexts) {
       conclusionParagraphs.push(
-        createStyledParagraph(text, {
-          size: 24,
-          indent: 0.2,
-        }),
+        createStyledParagraph(text, { 
+          size: templateStyle.bodySize, 
+          indent: 0.2, 
+          fontFamily: templateStyle.fontFamily 
+        })
       );
     }
-
-    // Call to action
+    
     if (content?.callToAction) {
-      conclusionParagraphs.push(new Paragraph({ spacing: { before: 300 } }));
+      conclusionParagraphs.push(new Paragraph({ spacing: { before: 200 } }));
       conclusionParagraphs.push(
-        createStyledParagraph(content.callToAction, {
-          bold: true,
-          size: 26,
-          color: accentColor,
-          alignment: AlignmentType.CENTER,
-        }),
+        createStyledParagraph(content.callToAction, { 
+          bold: true, 
+          size: 22, 
+          color: accentColor, 
+          alignment: AlignmentType.CENTER, 
+          fontFamily: templateStyle.fontFamily 
+        })
       );
     }
-
+    
     sections.push({ children: conclusionParagraphs });
 
     // ═══════════════════════════════════════════════════════════════
-    // NO BACK MATTER - NO BRANDING FOR PRO USERS!
+    // BACK MATTER - NO BRANDING FOR PRO, JUST THANK YOU
     // ═══════════════════════════════════════════════════════════════
+    const backParagraphs: Paragraph[] = [];
+    backParagraphs.push(new Paragraph({ pageBreakBefore: true }));
+    backParagraphs.push(new Paragraph({ spacing: { before: 400 } }));
+    
+    if (userFullName) {
+      backParagraphs.push(
+        createStyledParagraph(`Thank you, ${userFullName}`, { 
+          size: 28, 
+          color: accentColor, 
+          alignment: AlignmentType.CENTER, 
+          bold: true,
+          fontFamily: templateStyle.fontFamily 
+        })
+      );
+      backParagraphs.push(new Paragraph({ spacing: { after: 100 } }));
+      backParagraphs.push(
+        createStyledParagraph(`Your journey to mastering AI-powered content starts here.`, { 
+          size: 18, 
+          color: "666666", 
+          alignment: AlignmentType.CENTER, 
+          italic: true,
+          fontFamily: templateStyle.fontFamily 
+        })
+      );
+    }
+    
+    sections.push({ children: backParagraphs });
 
     // ── BUILD DOCUMENT ──
     const doc = new Document({
-      sections: sections.map((section) => ({
-        properties: {},
-        children: section.children,
+      sections: sections.map((section) => ({ 
+        properties: {}, 
+        children: section.children 
       })),
       styles: {
         paragraphStyles: [
-          {
-            id: "Normal",
-            name: "Normal",
-            basedOn: "Normal",
-            quickFormat: true,
-          },
+          { id: "Normal", name: "Normal", basedOn: "Normal", quickFormat: true },
         ],
       },
     });
@@ -603,7 +592,7 @@ export async function POST(req: Request) {
       .replace(/[^a-z0-9]/gi, "_")
       .slice(0, 50);
 
-    console.log("✅ Premium DOCX (No Branding) generated, size:", buffer.length);
+    console.log(`✅ DOCX generated with ${template} template`);
 
     return new NextResponse(buffer as any, {
       headers: {
@@ -615,11 +604,8 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("❌ DOCX generation error:", error);
     return NextResponse.json(
-      {
-        error: "Failed to generate DOCX",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
+      { error: "Failed to generate DOCX", details: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 }
     );
   }
 }

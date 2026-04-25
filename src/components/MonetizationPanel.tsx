@@ -3,11 +3,20 @@
 
 import { useState } from 'react'
 import { 
-  DollarSign, ShoppingCart, X, Mail, Copy, Check, 
-  Sparkles, ExternalLink, Briefcase, FileText, Code, 
-  Share2, MessageCircle, Download, Eye, Zap, Lock
+  FileText, 
+  Copy, 
+  Check, 
+  Loader2,
+  Mail,
+  Package,
+  Sparkles,
+  ArrowRight,
+  RefreshCw,
+  MessageSquare,
+  ShoppingBag
 } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 interface MonetizationPanelProps {
   ebookData: {
@@ -16,448 +25,265 @@ interface MonetizationPanelProps {
     chapters: any[]
     targetAudience?: string
   }
-  userPlan?: string
+  userPlan: string
 }
 
-export function MonetizationPanel({ ebookData, userPlan = 'free' }: MonetizationPanelProps) {
-  const [activeTab, setActiveTab] = useState<'sell' | 'sales-page' | 'bundle'>('sell')
-  const [salesPage, setSalesPage] = useState<any>(null)
-  const [bundle, setBundle] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [copied, setCopied] = useState<string | null>(null)
-  const [showPreview, setShowPreview] = useState(false)
+type ContentType = 'sales-page' | 'social-threads' | 'email-sequence' | 'bundle-description'
 
-const isPremium = userPlan !== 'free'
+export function MonetizationPanel({ ebookData, userPlan }: MonetizationPanelProps) {
+  const [activeTab, setActiveTab] = useState<ContentType>('sales-page')
+  const [generating, setGenerating] = useState(false)
+  const [generatedContent, setGeneratedContent] = useState<Record<ContentType, string>>({
+    'sales-page': '',
+    'social-threads': '',
+    'email-sequence': '',
+    'bundle-description': '',
+  })
+  const [copied, setCopied] = useState<ContentType | null>(null)
 
-
-  const suggestedPrices = [
-    { value: 7, label: '$7', desc: 'Impulse buy', color: 'bg-green-500' },
-    { value: 12, label: '$12', desc: 'Standard', color: 'bg-blue-500' },
-    { value: 19, label: '$19', desc: 'Premium', color: 'bg-indigo-500' },
-    { value: 29, label: '$29', desc: 'Value pack', color: 'bg-purple-500' }
-  ]
-
-  const platforms = [
-    { name: 'Gumroad', url: 'https://gumroad.com', icon: '🛒', color: 'bg-pink-500' },
-    { name: 'Payhip', url: 'https://payhip.com', icon: '💳', color: 'bg-blue-500' },
-    { name: 'Etsy', url: 'https://etsy.com', icon: '🏪', color: 'bg-orange-500' },
-    { name: 'Amazon KDP', url: 'https://kdp.amazon.com', icon: '📚', color: 'bg-yellow-600' }
-  ]
-
-  const generateSalesPage = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/sales-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'sales-page', ebookData })
-      })
-      const data = await res.json()
-      if (data.success && data.data) {
-        setSalesPage(data.data)
-      }
-    } catch (error) {
-      console.error('Failed to generate sales page:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const generateBundle = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/sales-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'bundle', ebookData })
-      })
-      const data = await res.json()
-      if (data.success && data.data) {
-        setBundle(data.data)
-      }
-    } catch (error) {
-      console.error('Failed to generate bundle:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(id)
-    setTimeout(() => setCopied(null), 2000)
-  }
-
-  // Generate Gumroad/Payhip ready description
-  const getMarketplaceDescription = () => {
-    return `${ebookData.title}
-
-${ebookData.subtitle}
-
-What You'll Get:
-${ebookData.chapters?.map((ch, i) => `${i + 1}. ${ch.title}`).join('\n')}
-
-Perfect for ${ebookData.targetAudience || 'entrepreneurs'} who want to:
-✓ Save time with ready-to-use strategies
-✓ Avoid common mistakes
-✓ Get results faster
-✓ Learn from real examples
-
-Instant PDF Download • Lifetime Access • Money-Back Guarantee`
-  }
-
-  if (!isPremium) {
+  // Only show for Starter and Pro users
+  if (userPlan === 'free') {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-8 text-center">
-          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-8 h-8 text-amber-600" />
+      <div className="relative bg-white rounded-xl border border-slate-200 p-4 sm:p-6 text-center">
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+          <div className="text-center p-4 sm:p-6">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+              <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-slate-900 mb-2">Unlock Monetization Tools</h3>
+            <p className="text-xs sm:text-sm text-slate-500 mb-4 px-2">
+              Generate sales pages, social media content, and email sequences to sell your ebook.
+            </p>
+            <Link 
+              href="/pricing" 
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg transition text-sm"
+            >
+              Upgrade to Starter
+              <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+            </Link>
           </div>
-          <h3 className="text-xl font-black text-slate-900 mb-2">Upgrade to Unlock Monetization</h3>
-          <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
-            Sales pages, social media content, and email sequences are available on Starter and Pro plans.
-          </p>
-          <Link
-            href="/pricing"
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-xl transition"
-          >
-            <Zap className="w-4 h-4" fill="white" />
-            Upgrade Now
-          </Link>
-          <p className="text-xs text-slate-400 mt-4">
-            Starter plan starts at $9/month • Cancel anytime
-          </p>
+        </div>
+        <div className="blur-sm opacity-50 pointer-events-none">
+          <div className="h-24 sm:h-32 bg-slate-100 rounded-lg mb-4" />
+          <div className="h-16 sm:h-20 bg-slate-100 rounded-lg" />
         </div>
       </div>
     )
   }
 
-  
+  const generateContent = async (type: ContentType) => {
+    setGenerating(true)
+    try {
+      const response = await fetch('/api/generate-sales-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          ebookData,
+          userPlan,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        setGeneratedContent(prev => ({ ...prev, [type]: data.content }))
+        toast.success(`${getTypeLabel(type)} generated successfully!`)
+      } else {
+        toast.error(data.message || 'Generation failed')
+      }
+    } catch (error) {
+      console.error('Generation error:', error)
+      toast.error('Failed to generate content')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const getTypeLabel = (type: ContentType): string => {
+    const labels = {
+      'sales-page': 'Sales Page',
+      'social-threads': 'Social Media Threads',
+      'email-sequence': 'Email Sequence',
+      'bundle-description': 'Bundle Description',
+    }
+    return labels[type]
+  }
+
+  const copyToClipboard = async (type: ContentType) => {
+    const content = generatedContent[type]
+    if (!content) return
+    
+    await navigator.clipboard.writeText(content)
+    setCopied(type)
+    setTimeout(() => setCopied(null), 2000)
+    toast.success('Copied to clipboard!')
+  }
+
+  const tabs = [
+    { id: 'sales-page' as ContentType, label: 'Sales Page', icon: ShoppingBag, description: 'High-converting sales copy' },
+    { id: 'social-threads' as ContentType, label: 'Social Threads', icon: MessageSquare, description: 'Twitter/LinkedIn threads' },
+    { id: 'email-sequence' as ContentType, label: 'Email Sequence', icon: Mail, description: '5-part nurture sequence' },
+    { id: 'bundle-description' as ContentType, label: 'Bundle Description', icon: Package, description: 'Product bundle copy' },
+  ]
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 bg-slate-50/50">
-        <button
-          onClick={() => setActiveTab('sell')}
-          className={`flex-1 px-4 py-3 text-sm font-bold flex items-center justify-center gap-2 transition ${
-            activeTab === 'sell'
-              ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          Sell
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('sales-page')
-            if (!salesPage) generateSalesPage()
-          }}
-          className={`flex-1 px-4 py-3 text-sm font-bold flex items-center justify-center gap-2 transition ${
-            activeTab === 'sales-page'
-              ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Code className="w-4 h-4" />
-          Sales Page
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('bundle')
-            if (!bundle) generateBundle()
-          }}
-          className={`flex-1 px-4 py-3 text-sm font-bold flex items-center justify-center gap-2 transition ${
-            activeTab === 'bundle'
-              ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          Content Bundle
-        </button>
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Header - Mobile Optimized */}
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base sm:text-lg font-black text-white">Monetization Suite</h3>
+            <p className="text-amber-100 text-[11px] sm:text-sm">Generate ready-to-use sales content for your ebook</p>
+          </div>
+          {userPlan === 'pro' && (
+            <div className="bg-white/20 rounded-full px-2 sm:px-3 py-0.5 sm:py-1 self-start sm:self-auto">
+              <span className="text-[10px] sm:text-xs font-bold text-white">PRO FEATURE</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="p-6">
-        {activeTab === 'sell' && (
-          <div className="space-y-6">
-            {/* Suggested Price */}
-            <div>
-              <h3 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" />
-                Suggested Price
-              </h3>
-              <div className="flex gap-3 flex-wrap">
-                {suggestedPrices.map(price => (
-                  <button
-                    key={price.value}
-                    className="px-5 py-3 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition text-center min-w-[80px] group"
-                  >
-                    <span className="text-xl font-black text-slate-800 group-hover:text-indigo-600">
-                      {price.label}
-                    </span>
-                    <p className="text-[10px] text-slate-400">{price.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Platforms */}
-            <div>
-              <h3 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-green-500" />
-                Sell On
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {platforms.map(platform => (
-                  <a
-                    key={platform.name}
-                    href={platform.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-sm transition group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{platform.icon}</span>
-                      <span className="font-bold text-slate-700 group-hover:text-indigo-600">
-                        {platform.name}
-                      </span>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Ready-to-use Description */}
-            <div>
-              <h3 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-500" />
-                Marketplace Description
-              </h3>
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
-                <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans">
-                  {getMarketplaceDescription()}
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(getMarketplaceDescription(), 'description')}
-                  className="mt-3 text-xs text-indigo-600 font-bold flex items-center gap-1 hover:text-indigo-700"
-                >
-                  {copied === 'description' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                  {copied === 'description' ? 'Copied!' : 'Copy Description'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'sales-page' && (
-          <div className="space-y-5">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-slate-500">Building your high-converting sales page...</p>
-              </div>
-            ) : salesPage ? (
-              <>
-                {/* Preview/Code Toggle */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowPreview(false)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${
-                      !showPreview ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    <Code className="w-4 h-4 inline mr-1" /> HTML Code
-                  </button>
-                  <button
-                    onClick={() => setShowPreview(true)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${
-                      showPreview ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    <Eye className="w-4 h-4 inline mr-1" /> Preview
-                  </button>
-                </div>
-
-                {/* HTML Code View */}
-                {!showPreview && (
-                  <div className="border rounded-xl overflow-hidden">
-                    <div className="bg-slate-800 text-white px-4 py-2 flex items-center justify-between">
-                      <span className="text-xs font-mono">HTML Code</span>
-                      <button
-                        onClick={() => copyToClipboard(salesPage.html, 'html')}
-                        className="text-white/70 hover:text-white text-xs flex items-center gap-1"
-                      >
-                        {copied === 'html' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                        {copied === 'html' ? 'Copied!' : 'Copy Code'}
-                      </button>
-                    </div>
-                    <div className="p-4 bg-slate-900 max-h-96 overflow-y-auto">
-                      <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">
-                        {salesPage.html}
-                      </pre>
-                    </div>
-                  </div>
+      {/* Tabs - Mobile Optimized with horizontal scroll */}
+      <div className="border-b border-slate-200 px-2 sm:px-4 overflow-x-auto">
+        <div className="flex gap-0.5 sm:gap-1 min-w-max sm:min-w-0">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const hasContent = generatedContent[tab.id]
+            const isGenerating = generating && activeTab === tab.id
+            
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 text-[11px] sm:text-sm font-bold transition-all relative whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">{tab.label}</span>
+                <span className="xs:hidden">{tab.label.split(' ')[0]}</span>
+                {hasContent && !isGenerating && (
+                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-500 rounded-full" />
                 )}
-
-                {/* Preview View */}
-                {showPreview && (
-                  <div className="border rounded-xl overflow-hidden">
-                    <div className="bg-slate-100 px-4 py-2 border-b">
-                      <span className="text-xs font-bold text-slate-500">Live Preview</span>
-                    </div>
-                    <div className="h-96 overflow-y-auto">
-                      <iframe
-                        srcDoc={salesPage.html}
-                        className="w-full h-full border-0"
-                        title="Sales Page Preview"
-                        sandbox="allow-same-origin allow-scripts"
-                      />
-                    </div>
-                  </div>
+                {isGenerating && (
+                  <Loader2 className="w-2 h-2 sm:w-3 sm:h-3 animate-spin ml-0.5" />
                 )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
-                <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-                  <p className="text-xs text-amber-700 font-medium mb-2">💡 How to Use</p>
-                  <p className="text-xs text-amber-600">
-                    1. Copy the HTML code above<br />
-                    2. Paste into Gumroad's "Custom HTML" section or your website<br />
-                    3. Replace the download link with your actual product URL<br />
-                    4. Customize colors and text as needed
-                  </p>
-                </div>
-              </>
-            ) : null}
+      {/* Content Area - Mobile Optimized */}
+      <div className="p-3 sm:p-6">
+        {!generatedContent[activeTab] && !generating ? (
+          // Empty State - Mobile Optimized
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+              <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600" />
+            </div>
+            <h4 className="text-base sm:text-lg font-black text-slate-900 mb-2">
+              Generate {getTypeLabel(activeTab)}
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-4 sm:mb-6 px-2">
+              {activeTab === 'sales-page' && 'Create a high-converting sales page that showcases your ebook\'s value proposition and drives purchases.'}
+              {activeTab === 'social-threads' && 'Generate viral-ready Twitter/LinkedIn threads that build anticipation and engagement.'}
+              {activeTab === 'email-sequence' && 'Create a 5-part email sequence for launching your ebook to your list.'}
+              {activeTab === 'bundle-description' && 'Write compelling bundle copy for selling on Gumroad, Etsy, or Shopify.'}
+            </p>
+            <button
+              onClick={() => generateContent(activeTab)}
+              disabled={generating}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl transition text-sm"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                  <span className="text-xs sm:text-sm">Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="text-xs sm:text-sm">Generate {getTypeLabel(activeTab)}</span>
+                </>
+              )}
+            </button>
           </div>
-        )}
-
-        {activeTab === 'bundle' && (
-          <div className="space-y-5">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-slate-500">Creating your content bundle...</p>
+        ) : (
+          // Generated Content View - Mobile Optimized
+          <div>
+            <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-3 sm:mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] sm:text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 sm:px-2 py-0.5 rounded-full">
+                  AI Generated
+                </span>
+                <span className="text-[9px] sm:text-xs text-slate-400">
+                  Ready to copy & paste
+                </span>
               </div>
-            ) : bundle ? (
-              <>
-                {/* Twitter Thread */}
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-black text-white px-4 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <X className="w-4 h-4" />
-                      <span className="text-xs font-bold">Twitter Thread</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(bundle.twitterThread, 'twitter')}
-                      className="text-white/70 hover:text-white"
-                    >
-                      {copied === 'twitter' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <div className="p-4 bg-white max-h-48 overflow-y-auto">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{bundle.twitterThread}</p>
-                  </div>
-                </div>
+              <button
+                onClick={() => copyToClipboard(activeTab)}
+                className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-slate-500 hover:text-indigo-600 transition py-1"
+              >
+                {copied === activeTab ? (
+                  <>
+                    <Check className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
+                    <span className="text-[10px] sm:text-xs">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-[10px] sm:text-xs">Copy to Clipboard</span>
+                  </>
+                )}
+              </button>
+            </div>
 
-                {/* LinkedIn Post */}
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-blue-600 text-white px-4 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="w-4 h-4" />
-                      <span className="text-xs font-bold">LinkedIn Post</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(bundle.linkedinPost, 'linkedin')}
-                      className="text-white/70 hover:text-white"
-                    >
-                      {copied === 'linkedin' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <div className="p-4 bg-white max-h-48 overflow-y-auto">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{bundle.linkedinPost}</p>
-                  </div>
-                </div>
+            <div className="bg-slate-50 rounded-xl p-3 sm:p-5 max-h-[400px] sm:max-h-[500px] overflow-y-auto">
+              <pre className="whitespace-pre-wrap font-sans text-[11px] sm:text-sm text-slate-700 leading-relaxed">
+                {generatedContent[activeTab]}
+              </pre>
+            </div>
 
-                {/* Instagram Caption */}
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Share2 className="w-4 h-4" />
-                      <span className="text-xs font-bold">Instagram Caption</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(bundle.instagramCaption, 'instagram')}
-                      className="text-white/70 hover:text-white"
-                    >
-                      {copied === 'instagram' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <div className="p-4 bg-white max-h-48 overflow-y-auto">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{bundle.instagramCaption}</p>
-                  </div>
-                </div>
-
-                {/* Facebook Post */}
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-blue-700 text-white px-4 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <MessageCircle className="w-4 h-4" />
-                      <span className="text-xs font-bold">Facebook Post</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(bundle.facebookPost, 'facebook')}
-                      className="text-white/70 hover:text-white"
-                    >
-                      {copied === 'facebook' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <div className="p-4 bg-white max-h-48 overflow-y-auto">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{bundle.facebookPost}</p>
-                  </div>
-                </div>
-
-                {/* Gumroad Description */}
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-pink-500 text-white px-4 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4" />
-                      <span className="text-xs font-bold">Gumroad Description</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(bundle.gumroadDescription, 'gumroad')}
-                      className="text-white/70 hover:text-white"
-                    >
-                      {copied === 'gumroad' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <div className="p-4 bg-white max-h-48 overflow-y-auto">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{bundle.gumroadDescription}</p>
-                  </div>
-                </div>
-
-                {/* Email Sequence */}
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-emerald-600 text-white px-4 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
-                      <span className="text-xs font-bold">Email Sequence</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(bundle.emailSequence, 'email')}
-                      className="text-white/70 hover:text-white"
-                    >
-                      {copied === 'email' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <div className="p-4 bg-white max-h-64 overflow-y-auto">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{bundle.emailSequence}</p>
-                  </div>
-                </div>
-              </>
-            ) : null}
+            <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 mt-3 sm:mt-4">
+              <button
+                onClick={() => generateContent(activeTab)}
+                disabled={generating}
+                className="flex-1 flex items-center justify-center gap-1 sm:gap-2 border border-slate-200 hover:border-slate-300 text-slate-600 font-bold py-2 sm:py-2.5 rounded-lg transition text-xs sm:text-sm"
+              >
+                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" />
+                Regenerate
+              </button>
+              <button
+                onClick={() => copyToClipboard(activeTab)}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 sm:py-2.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm"
+              >
+                <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
+                Copy & Use
+              </button>
+            </div>
           </div>
         )}
+      </div>
+
+      {/* Tips Section - Mobile Optimized */}
+      <div className="bg-slate-50 border-t border-slate-200 px-3 sm:px-6 py-3 sm:py-4">
+        <div className="flex items-start gap-2 sm:gap-3">
+          <div className="w-6 h-6 sm:w-8 sm:h-8 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+            <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-amber-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs sm:text-sm font-bold text-slate-800">Pro Tips</p>
+            <p className="text-[10px] sm:text-xs text-slate-500 break-words">
+              {activeTab === 'sales-page' && 'Add social proof and urgency to increase conversion rates. Test different headlines.'}
+              {activeTab === 'social-threads' && 'Post one thread per day for 3 days before launch. Reply to comments to boost engagement.'}
+              {activeTab === 'email-sequence' && 'Personalize the emails with your brand voice. Send every 24-48 hours.'}
+              {activeTab === 'bundle-description' && 'Highlight the value vs price. Compare to similar products in your niche.'}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

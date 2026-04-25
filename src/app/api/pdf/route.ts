@@ -348,13 +348,12 @@ export async function POST(req: Request) {
       theme = "indigo",
       template = "premium",
       includeChapterImages = true,
+      customSettings = null,
     } = await req.json();
 
     // ── Plan check ──
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     let userPlan = "free";
     if (user) {
       const { data: planData } = await supabase
@@ -366,14 +365,10 @@ export async function POST(req: Request) {
       if (planData) userPlan = planData.plan_id;
     }
     const isFreePlan = userPlan === "free";
-    const shouldAddImages =
-      (userPlan === "starter" || userPlan === "pro") &&
-      includeChapterImages === true;
-    console.log(
-      `📄 PDF Plan: ${userPlan} | Template: ${template} | Images: ${shouldAddImages}`,
-    );
+    const shouldAddImages = (userPlan === "starter" || userPlan === "pro") && includeChapterImages === true;
+    console.log(`📄 PDF Plan: ${userPlan} | Template: ${template} | Images: ${shouldAddImages}`);
 
-    // ── FETCH USER PROFILE EARLY (so we can use it everywhere) ──
+    // ── FETCH USER PROFILE EARLY ──
     let userName = "Valued Reader";
     let userEmail = "";
 
@@ -385,10 +380,10 @@ export async function POST(req: Request) {
         .single();
 
       if (profile?.full_name && profile.full_name.trim().length > 0) {
-        userName = profile.full_name.split(" ")[0]; // First name only
+        userName = profile.full_name.split(" ")[0];
       } else if (user.email) {
         userEmail = user.email;
-        userName = user.email.split("@")[0]; // Use part before @
+        userName = user.email.split("@")[0];
       }
     }
 
@@ -400,35 +395,75 @@ export async function POST(req: Request) {
 
     // Use different fonts based on template
     const TITLE_FONT = await doc.embedFont(StandardFonts.HelveticaBold);
-    const HEADING_FONT =
-      templateStyle.fontFamily === "serif"
-        ? await doc.embedFont(StandardFonts.TimesRomanBold)
-        : await doc.embedFont(StandardFonts.HelveticaBold);
-    const BODY_FONT =
-      templateStyle.fontFamily === "serif"
-        ? await doc.embedFont(StandardFonts.TimesRoman)
-        : await doc.embedFont(StandardFonts.Helvetica);
-    const ITAL_FONT =
-      templateStyle.fontFamily === "serif"
-        ? await doc.embedFont(StandardFonts.TimesRomanItalic)
-        : await doc.embedFont(StandardFonts.HelveticaOblique);
-    const REG = BODY_FONT;
-    const BOLD = HEADING_FONT;
-    const ITAL = ITAL_FONT;
+    const HEADING_FONT = templateStyle.fontFamily === "serif"
+      ? await doc.embedFont(StandardFonts.TimesRomanBold)
+      : await doc.embedFont(StandardFonts.HelveticaBold);
+    const REGULAR_FONT = templateStyle.fontFamily === "serif"
+      ? await doc.embedFont(StandardFonts.TimesRoman)
+      : await doc.embedFont(StandardFonts.Helvetica);
+    const ITALIC_FONT = templateStyle.fontFamily === "serif"
+      ? await doc.embedFont(StandardFonts.TimesRomanItalic)
+      : await doc.embedFont(StandardFonts.HelveticaOblique);
 
-    const W = 595,
-      H = 842;
-    const ML = templateStyle.margins.left;
-    const MR = templateStyle.margins.right;
+    // Default values
+    let effectiveBodyFont = REGULAR_FONT;
+    let effectiveBodySize = templateStyle.bodySize;
+    let effectiveBodyLH = templateStyle.lineHeight;
+    let effectiveML = templateStyle.margins.left;
+    let effectiveMR = templateStyle.margins.right;
+    let effectiveShowPageNumbers = true;
+    let effectiveChapterStartPage = "new";
+
+    // ── Apply custom settings (Pro only) - AFTER fonts are defined ──
+    if (userPlan === "pro" && customSettings) {
+      console.log("🎨 Applying Pro PDF customizations:", customSettings);
+      
+      // Font Family
+      if (customSettings.fontFamily === "serif") {
+        effectiveBodyFont = await doc.embedFont(StandardFonts.TimesRoman);
+      } else {
+        effectiveBodyFont = await doc.embedFont(StandardFonts.Helvetica);
+      }
+      
+      // Font Size
+      effectiveBodySize = customSettings.fontSize;
+      
+      // Line Height
+      effectiveBodyLH = customSettings.fontSize * customSettings.lineHeight;
+      
+      // Margins
+      const marginMap = {
+        compact: { left: 48, right: 48 },
+        normal: { left: 58, right: 58 },
+        spacious: { left: 78, right: 78 },
+      };
+      const selectedMargins = marginMap[customSettings.margins as keyof typeof marginMap] || marginMap.normal;
+      effectiveML = selectedMargins.left;
+      effectiveMR = selectedMargins.right;
+      
+      // Show Page Numbers
+      effectiveShowPageNumbers = customSettings.showPageNumbers;
+      
+      // Chapter Start Page
+      effectiveChapterStartPage = customSettings.chapterStartPage;
+    }
+
+    const REG = effectiveBodyFont;
+    const BOLD = HEADING_FONT;
+    const ITAL = ITALIC_FONT;
+
+    const W = 595, H = 842;
+    const ML = effectiveML;
+    const MR = effectiveMR;
     const TW = W - ML - MR;
     const FOOTER_Y = 46;
 
     const [ar, ag, ab] = THEMES[theme] || THEMES.indigo;
     const C = buildPalette(ar, ag, ab, template);
 
-    // Body typography from template
-    const BODY_SIZE = templateStyle.bodySize;
-    const BODY_LH = templateStyle.lineHeight;
+    // Body typography
+    const BODY_SIZE = effectiveBodySize;
+    const BODY_LH = effectiveBodyLH;
     const PARA_GAP = 12;
 
     let pageNumber = 0;
@@ -486,7 +521,20 @@ export async function POST(req: Request) {
         thickness: templateStyle.showDecorations ? 0.8 : 0.5,
         color: C.divider,
       });
-      if (isFreePlan) {
+      // Only show page numbers if enabled (Pro can disable)
+  if (effectiveShowPageNumbers === false && userPlan === "pro") {
+    // No page numbers
+    if (!isFreePlan) {
+      const displaySection = template === "minimal" ? section.slice(0, 25) : section.slice(0, 35);
+      page.drawText(displaySection, {
+        x: ML,
+        y: 26,
+        size: 8,
+        font: REG,
+        color: C.inkLight,
+      });
+    }
+  } else if (isFreePlan) {
         page.drawText(`${pageNumber}`, {
           x: W - MR - 12,
           y: 26,

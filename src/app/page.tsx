@@ -295,7 +295,7 @@ const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
               Generate complete sales pages, social media posts, and email sequences for your products.
             </p>
             <ul className="space-y-2 text-xs text-zinc-600">
-              <li className="flex items-center gap-2">✓ HTML sales pages</li>
+<li className="flex items-center gap-2">✓ Sales page copy</li>
               <li className="flex items-center gap-2">✓ Social media content</li>
               <li className="flex items-center gap-2">✓ Email marketing copy</li>
             </ul>
@@ -461,15 +461,15 @@ const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   {/* Simple Stats */}
   <div className="flex flex-wrap justify-center gap-8 mt-12 pt-8 border-t border-white/5">
     <div className="text-center">
-      <p className="text-2xl font-black text-white">1,000+</p>
+      <p className="text-2xl font-black text-white">500+</p>
       <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Active Creators</p>
     </div>
     <div className="text-center">
-      <p className="text-2xl font-black text-white">5,000+</p>
+      <p className="text-2xl font-black text-white">2,000+</p>
       <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Ebooks Forged</p>
     </div>
     <div className="text-center">
-      <p className="text-2xl font-black text-white">$50K+</p>
+      <p className="text-2xl font-black text-white">$10K+</p>
       <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Creator Revenue</p>
     </div>
   </div>

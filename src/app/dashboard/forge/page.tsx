@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { useSubscription } from "@/lib/hooks/useSubscription";
 import { ForgeError } from "@/components/ForgeError";
+import { Sliders, ChevronDown } from "lucide-react";
 
 interface Idea {
   title: string;
@@ -197,6 +198,7 @@ export default function ForgePage() {
   const [currentEbookId, setCurrentEbookId] = useState<string | null>(null);
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [isCheckingLimit, setIsCheckingLimit] = useState(false);
+  const [showPdfSettings, setShowPdfSettings] = useState(false);
 
   const {
     plan,
@@ -204,6 +206,16 @@ export default function ForgePage() {
     loading: subscriptionLoading,
     refresh: refreshUsage,
   } = useSubscription();
+
+  // PDF Customization Settings (Pro only)
+  const [pdfSettings, setPdfSettings] = useState({
+    fontFamily: "sans-serif", // sans-serif or serif
+    fontSize: 11,
+    lineHeight: 1.4,
+    margins: "normal", // compact, normal, spacious
+    showPageNumbers: true,
+    chapterStartPage: "new", // new or same
+  });
 
   const [includeChapterImages, setIncludeChapterImages] = useState(true);
   const activeTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
@@ -392,6 +404,26 @@ export default function ForgePage() {
     }
   }, [plan]);
 
+  // Load saved settings from localStorage on mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem("pdf-custom-settings");
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setPdfSettings(parsed);
+      } catch (e) {
+        console.error("Failed to load PDF settings:", e);
+      }
+    }
+  }, []);
+
+  // Save settings to localStorage when changed
+  useEffect(() => {
+    if (plan === "pro") {
+      localStorage.setItem("pdf-custom-settings", JSON.stringify(pdfSettings));
+    }
+  }, [pdfSettings, plan]);
+
   // Set default template based on plan
   useEffect(() => {
     if (!pdfTemplate) {
@@ -519,7 +551,7 @@ export default function ForgePage() {
     setGenError("");
 
     // Update genSteps with CORRECTED chapter count
-    if (plan === "pro" || plan === "starter") {
+    if (plan === "pro") {
       const prioritySteps = [
         "⚡ PRIORITY: Reading your customizations...",
         "⚡ Writing introduction at lightning speed...",
@@ -724,6 +756,7 @@ export default function ForgePage() {
           template: pdfTemplate || "premium",
           includeChapterImages: includeChapterImages,
           userPlan: plan,
+          customSettings: plan === "pro" ? pdfSettings : null,
         }),
       });
       console.log("Response status:", response.status);
@@ -887,9 +920,9 @@ export default function ForgePage() {
 
   if (!idea) {
     return (
-      <div className="flex w-full min-h-screen bg-[#f5f6fa]">
-        <Sidebar />
-        <main className="flex-1 md:ml-60 px-4 md:px-8 pt-20 md:pt-10 pb-16">
+  <div className="flex w-full min-h-screen bg-[#f5f6fa] overflow-x-hidden max-w-[100vw]">
+    <Sidebar />
+    <main className="flex-1 md:ml-60 px-3 sm:px-4 md:px-6 pt-20 md:pt-10 pb-16 w-full max-w-full overflow-x-hidden">
           <div className="flex items-center justify-center min-h-[60vh]">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
@@ -903,156 +936,151 @@ export default function ForgePage() {
 
   // ========== MAIN RETURN ==========
   return (
-    <div className="flex w-full min-h-screen bg-[#f5f6fa]">
+    <div className="dashboard-page flex w-full min-h-screen bg-[#f5f6fa]">
       <Sidebar />
       <main className="flex-1 md:ml-60 px-4 md:px-8 pt-20 md:pt-10 pb-16">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-8">
           <button
             onClick={() => router.push("/dashboard/generate")}
-            className="p-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 transition cursor-pointer"
+            className="p-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 transition cursor-pointer shrink-0"
           >
             <ArrowLeft className="w-4 h-4 text-slate-500" />
           </button>
-          <div>
-            <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
               Forge Product
             </h1>
-            <p className="text-slate-400 text-xs mt-0.5 truncate max-w-xs md:max-w-md">
+            <p className="text-slate-400 text-xs mt-0.5 truncate">
               {customTitle}
             </p>
           </div>
         </div>
-
-        {/* Draft Restore Prompt */}
-        {showDraftPrompt && draftData && (
-          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                <svg
-                  className="w-5 h-5 text-amber-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-amber-800">
-                  Unsaved Draft Found
-                </p>
-                <p className="text-xs text-amber-600">
-                  We found an unfinished ebook from your last session
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={restoreDraft}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg transition"
-              >
-                Restore Draft
-              </button>
-              <button
-                onClick={() => {
-                  clearDraft();
-                  setShowDraftPrompt(false);
-                }}
-                className="px-4 py-2 border border-amber-300 text-amber-700 text-sm font-bold rounded-lg transition"
-              >
-                Discard
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Steps */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-8">
-          <div className="flex items-center justify-between">
-            {STEPS.map((s, i) => (
-              <div key={s.id} className="flex items-center flex-1">
-                <div className="flex flex-col items-center gap-1.5 flex-1">
-                  <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${
-                      step > s.id
-                        ? "bg-indigo-600 border-indigo-600 text-white"
-                        : step === s.id
-                          ? "border-indigo-600 text-indigo-600 bg-indigo-50"
-                          : "border-slate-200 text-slate-300 bg-white"
-                    }`}
-                  >
-                    {step > s.id ? <Check className="w-4 h-4" /> : s.icon}
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold hidden sm:block uppercase tracking-wide ${step >= s.id ? "text-slate-600" : "text-slate-300"}`}
-                  >
-                    {s.label}
-                  </span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div
-                    className={`h-[2px] flex-1 mx-1 rounded transition-all ${step > s.id ? "bg-indigo-600" : "bg-slate-100"}`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+{/* Draft Restore Prompt - ULTRA COMPACT, NO OVERFLOW */}
+{showDraftPrompt && draftData && (
+  <div className="mb-3 bg-amber-50 border border-amber-200 rounded-lg w-full overflow-hidden">
+    <div className="p-2">
+      <div className="flex flex-wrap items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <svg
+            className="w-3 h-3 text-amber-600 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <p className="text-[10px] font-medium text-amber-800 truncate">
+            Unsaved draft found
+          </p>
         </div>
-
-        {/* Friendly Quota Warning - Not Redirecting */}
-        {plan !== "pro" && usage.remaining === 0 && (
-          <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
-                <svg
-                  className="w-5 h-5 text-amber-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-amber-800">
-                  Generation limit reached
-                </p>
-                <p className="text-xs text-amber-700">
-                  You've used all {usage.limit} generations this month.
-                  {plan === "free" &&
-                    " Upgrade to Starter for 15 generations/month or Pro for 50 generations/month."}
-                  {plan === "starter" &&
-                    " Upgrade to Pro for 50 generations/month."}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition shrink-0"
-            >
-              Upgrade Now
-            </button>
+        <div className="flex gap-1 shrink-0">
+          <button
+            onClick={restoreDraft}
+            className="px-2 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded"
+          >
+            Restore
+          </button>
+          <button
+            onClick={() => {
+              clearDraft();
+              setShowDraftPrompt(false);
+            }}
+            className="px-2 py-0.5 border border-amber-300 text-amber-700 text-[9px] font-bold rounded bg-white"
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+{/* Steps - Fixed horizontal scroll without breaking layout */}
+<div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-6 w-full overflow-x-auto">
+  <div className="flex items-center justify-between min-w-[400px] sm:min-w-0">
+    {STEPS.map((s, i) => (
+      <div key={s.id} className="flex items-center flex-1 min-w-0">
+        <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+          <div
+            className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border-2 transition-all shrink-0 ${
+              step > s.id
+                ? "bg-indigo-600 border-indigo-600 text-white"
+                : step === s.id
+                  ? "border-indigo-600 text-indigo-600 bg-indigo-50"
+                  : "border-slate-200 text-slate-300 bg-white"
+            }`}
+          >
+            <span className="w-3 h-3 sm:w-4 sm:h-4 flex items-center justify-center">
+              {step > s.id ? (
+                <Check className="w-3 h-3 sm:w-4 sm:h-4" />
+              ) : (
+                s.icon
+              )}
+            </span>
           </div>
+          <span
+            className={`text-[8px] sm:text-[10px] font-bold uppercase tracking-wide truncate max-w-full px-0.5 ${step >= s.id ? "text-slate-600" : "text-slate-300"}`}
+          >
+            {s.label}
+          </span>
+        </div>
+        {i < STEPS.length - 1 && (
+          <div
+            className={`h-[2px] flex-1 mx-0.5 sm:mx-1 rounded transition-all shrink-0 ${step > s.id ? "bg-indigo-600" : "bg-slate-100"}`}
+          />
         )}
-
+      </div>
+    ))}
+  </div>
+</div>
+{/* Friendly Quota Warning - No overflow */}
+{plan !== "pro" && usage.remaining === 0 && (
+  <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl p-3 w-full overflow-hidden">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+          <svg
+            className="w-4 h-4 text-amber-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-amber-800">Limit reached</p>
+          <p className="text-[10px] text-amber-700 truncate">
+            Used {usage.used}/{usage.limit} generations
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={() => setShowUpgradeModal(true)}
+        className="px-3 py-1.5 bg-amber-600 text-white text-[10px] font-bold rounded-lg w-full sm:w-auto text-center"
+      >
+        Upgrade
+      </button>
+    </div>
+  </div>
+)}
         {/* ── STEP 1: Style — Theme + Template ── */}
         {step === 1 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
             <h2 className="text-base font-black text-slate-900 mb-1">
               Choose Your Style
             </h2>
-            <p className="text-slate-400 text-sm mb-6">
+            <p className="text-slate-400 text-sm mb-4 sm:mb-6">
               Select a template and accent color for your ebook.
             </p>
 
@@ -1076,7 +1104,7 @@ export default function ForgePage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {TEMPLATES.filter((t) => {
                   if (plan === "free") return t.plan === "free";
                   if (plan === "starter")
@@ -1197,27 +1225,25 @@ export default function ForgePage() {
                   </span>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-2">
                 {THEMES.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setTheme(t.id)}
                     title={t.label}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-2 ${
+                    className={`flex items-center justify-center sm:justify-start gap-1.5 px-2 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer border-2 ${
                       theme === t.id
                         ? "bg-white shadow-md scale-105"
-                        : "border-transparent bg-slate-100 hover:bg-white hover:shadow-sm hover:scale-105"
+                        : "border-transparent bg-slate-100 hover:bg-white hover:shadow-sm"
                     }`}
                     style={theme === t.id ? { borderColor: t.hex } : {}}
                   >
                     <span
-                      className="w-3.5 h-3.5 rounded-full shadow-sm"
+                      className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full shadow-sm shrink-0"
                       style={{ backgroundColor: t.hex }}
                     />
                     <span
-                      className={
-                        theme === t.id ? "text-slate-800" : "text-slate-500"
-                      }
+                      className={`hidden sm:inline ${theme === t.id ? "text-slate-800" : "text-slate-500"}`}
                     >
                       {t.label}
                     </span>
@@ -1243,121 +1269,143 @@ export default function ForgePage() {
             </button>
           </div>
         )}
-
-        {/* ── STEP 2: Cover Image ── */}
+        {/* ── STEP 2: Cover Image - COMPLETE MOBILE FIX ── */}
         {step === 2 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <h2 className="text-base font-black text-slate-900 mb-1">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 overflow-hidden">
+            <h2 className="text-lg font-black text-slate-900 mb-1 break-words">
               Choose a Cover Image
             </h2>
-            <p className="text-slate-400 text-sm mb-6">
+            <p className="text-slate-400 text-xs mb-4 break-words">
               Pick a photo for your ebook cover. Powered by Unsplash.
             </p>
 
-            {photosLoading && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-video bg-slate-100 rounded-xl animate-pulse"
-                  />
-                ))}
+            {/* Search Section - Fixed width */}
+            <div className="mb-5 w-full">
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={
+                    idea?.niche ? `Search ${idea.niche}...` : "Search images..."
+                  }
+                  className="flex-1 min-w-0 w-full border border-slate-200 focus:border-indigo-400 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-300 outline-none bg-slate-50 focus:bg-white transition"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchQuery) {
+                      fetchPhotos(searchQuery);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => searchQuery && fetchPhotos(searchQuery)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer whitespace-nowrap"
+                >
+                  Search
+                </button>
               </div>
-            )}
-            {!photosLoading && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-                {photos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    onClick={() => setSelectedPhoto(photo)}
-                    className={`aspect-video rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                      selectedPhoto?.id === photo.id
-                        ? "border-indigo-500 shadow-md shadow-indigo-100"
-                        : "border-transparent hover:border-indigo-300"
-                    }`}
-                  >
-                    <img
-                      src={photo.urls.small}
-                      alt={photo.alt_description}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex gap-3 mb-6">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search different images..."
-                className="flex-1 border border-slate-200 focus:border-indigo-400 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-300 outline-none bg-slate-50 focus:bg-white transition"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && searchQuery)
-                    fetchPhotos(searchQuery);
-                }}
-              />
-              <button
-                onClick={() => searchQuery && fetchPhotos(searchQuery)}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold px-4 py-2.5 rounded-xl transition cursor-pointer"
-              >
-                Search
-              </button>
             </div>
 
-            {/* Add this after the search button in Step 2 */}
+            {/* Loading State */}
+            {photosLoading && (
+              <div className="mb-5 w-full">
+                <div className="grid grid-cols-2 gap-2 w-full">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="aspect-video bg-slate-100 rounded-xl animate-pulse w-full"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Photos Grid - MOBILE OPTIMIZED with overflow prevention */}
+            {!photosLoading && photos.length > 0 && (
+              <div className="mb-5 w-full">
+                <div className="grid grid-cols-2 gap-2 w-full max-w-full overflow-hidden">
+                  {photos.slice(0, 8).map((photo) => (
+                    <div
+                      key={photo.id}
+                      onClick={() => setSelectedPhoto(photo)}
+                      className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-all w-full ${
+                        selectedPhoto?.id === photo.id
+                          ? "border-indigo-500 ring-2 ring-indigo-200"
+                          : "border-transparent"
+                      }`}
+                    >
+                      <img
+                        src={photo.urls.small}
+                        alt={photo.alt_description || "Cover image"}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {selectedPhoto?.id === photo.id && (
+                        <div className="absolute top-1 right-1 bg-indigo-500 rounded-full p-0.5">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No Images State */}
             {!photosLoading && photos.length === 0 && (
-              <div className="text-center py-8 bg-slate-50 rounded-xl mb-6">
-                <p className="text-sm text-slate-500 mb-3">
-                  Unable to load images right now
-                </p>
+              <div className="text-center py-6 bg-slate-50 rounded-xl mb-5 w-full">
+                <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500 mb-2">No images found</p>
                 <button
                   onClick={() => {
-                    setSelectedPhoto(null);
-                    setStep(3);
+                    if (idea?.niche) {
+                      fetchPhotos(idea.niche);
+                    } else {
+                      fetchPhotos("business");
+                    }
                   }}
-                  className="text-indigo-600 text-sm font-medium hover:text-indigo-700"
+                  className="text-indigo-600 text-sm font-medium"
                 >
-                  Continue without cover image →
+                  Try default images
                 </button>
               </div>
             )}
 
+            {/* Selected Photo Preview */}
             {selectedPhoto && (
-              <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl mb-6">
+              <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl mb-5 w-full overflow-hidden">
                 <img
                   src={selectedPhoto.urls.thumb}
-                  className="w-12 h-8 object-cover rounded-lg"
+                  className="w-12 h-10 object-cover rounded-lg shrink-0"
+                  alt="Selected cover"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-indigo-700">Selected</p>
-                  <p className="text-xs text-indigo-500 truncate">
-                    Photo by {selectedPhoto.user?.name} on Unsplash
+                  <p className="text-xs font-bold text-indigo-700">
+                    ✓ Cover Selected
+                  </p>
+                  <p className="text-[10px] text-indigo-500 truncate">
+                    Photo by {selectedPhoto.user?.name || "Unsplash"}
                   </p>
                 </div>
-                <Check className="w-4 h-4 text-indigo-600 shrink-0" />
               </div>
             )}
 
-            <div className="flex gap-3">
+            {/* Navigation Buttons - Fixed width */}
+            <div className="flex gap-3 mt-2 w-full">
               <button
                 onClick={() => setStep(1)}
-                className="flex-1 border border-slate-200 text-slate-600 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:border-slate-300 transition cursor-pointer"
+                className="flex-1 border border-slate-200 text-slate-600 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 transition cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
               <button
                 onClick={() => setStep(3)}
-                disabled={!selectedPhoto}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md"
               >
                 Continue <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
-
         {/* ── STEP 3: Customize ── */}
         {step === 3 && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
@@ -1390,7 +1438,7 @@ export default function ForgePage() {
                   className="w-full border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-xl px-4 py-3 text-sm text-slate-800 bg-slate-50 focus:bg-white outline-none transition"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
                     Writing Tone
@@ -1412,13 +1460,13 @@ export default function ForgePage() {
                   </div>
                 </div>
                 <div className="space-y-4">
-                  {/* BOOK LENGTH SELECTOR - WITH PLAN LIMITS */}
+                  {/* BOOK LENGTH SELECTOR - MOBILE OPTIMIZED */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 mb-2">
                       <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                         Book Length
                       </label>
-                      <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+                      <span className="text-[10px] sm:text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
                         {bookLength === "short"
                           ? "10-15 pages"
                           : bookLength === "medium"
@@ -1426,12 +1474,14 @@ export default function ForgePage() {
                             : "50+ pages"}
                       </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+
+                    {/* 3 column grid - FIXED for mobile text overflow */}
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                       {[
                         {
                           id: "short",
                           label: "Short",
-                          pages: "10-15 pgs",
+                          pages: "10-15",
                           desc: "Quick read",
                           icon: "⚡",
                           chapters: 4,
@@ -1440,7 +1490,7 @@ export default function ForgePage() {
                         {
                           id: "medium",
                           label: "Medium",
-                          pages: "20-30 pgs",
+                          pages: "20-30",
                           desc: "Standard",
                           icon: "📘",
                           chapters: 6,
@@ -1449,14 +1499,13 @@ export default function ForgePage() {
                         {
                           id: "long",
                           label: "Long",
-                          pages: "50+ pgs",
+                          pages: "50+",
                           desc: "Premium",
                           icon: "📚",
                           chapters: 10,
                           plan: "pro",
                         },
                       ].map((opt) => {
-                        // Check if user has access to this length
                         const isDisabled =
                           (opt.id === "medium" && plan === "free") ||
                           (opt.id === "long" && plan !== "pro");
@@ -1486,7 +1535,7 @@ export default function ForgePage() {
                               );
                               setChapterCount(opt.chapters);
                             }}
-                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer text-left relative ${
+                            className={`p-1.5 sm:p-2 md:p-3 rounded-xl border-2 transition-all cursor-pointer text-center ${
                               bookLength === opt.id && !isDisabled
                                 ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100"
                                 : isDisabled
@@ -1496,33 +1545,45 @@ export default function ForgePage() {
                             disabled={isDisabled}
                           >
                             {isLocked && (
-                              <div className="absolute top-2 right-2">
-                                <span className="text-[8px] font-black text-amber-500">
+                              <div className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1">
+                                <span className="text-[6px] sm:text-[8px] font-black text-amber-500">
                                   LOCKED
                                 </span>
                               </div>
                             )}
                             {isProLocked && (
-                              <div className="absolute top-2 right-2">
-                                <span className="text-[8px] font-black text-purple-500">
+                              <div className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1">
+                                <span className="text-[6px] sm:text-[8px] font-black text-purple-500">
                                   PRO
                                 </span>
                               </div>
                             )}
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-lg">{opt.icon}</span>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-sm sm:text-base md:text-lg">
+                                {opt.icon}
+                              </span>
                               <span
-                                className={`text-sm font-black ${bookLength === opt.id && !isDisabled ? "text-indigo-700" : isDisabled ? "text-slate-400" : "text-slate-700"}`}
+                                className={`text-[11px] sm:text-xs md:text-sm font-black ${
+                                  bookLength === opt.id && !isDisabled
+                                    ? "text-indigo-700"
+                                    : isDisabled
+                                      ? "text-slate-400"
+                                      : "text-slate-700"
+                                }`}
                               >
                                 {opt.label}
                               </span>
                             </div>
                             <p
-                              className={`text-[10px] font-bold ${bookLength === opt.id && !isDisabled ? "text-indigo-500" : "text-slate-400"}`}
+                              className={`text-[8px] sm:text-[9px] font-bold ${
+                                bookLength === opt.id && !isDisabled
+                                  ? "text-indigo-500"
+                                  : "text-slate-400"
+                              }`}
                             >
-                              {opt.pages}
+                              {opt.pages} pgs
                             </p>
-                            <p className="text-[9px] text-slate-400 mt-0.5">
+                            <p className="text-[7px] sm:text-[8px] text-slate-400 mt-0.5 hidden sm:block">
                               {opt.desc}
                             </p>
                           </button>
@@ -1737,6 +1798,242 @@ export default function ForgePage() {
                     </div>
                   )}
 
+                  {/* PDF Customization - PRO ONLY */}
+                  {plan === "pro" && (
+                    <div className="mt-6 border-t border-slate-200 pt-6">
+                      <button
+                        onClick={() => setShowPdfSettings(!showPdfSettings)}
+                        className="w-full flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-indigo-600" />
+                          <span className="text-sm font-black text-slate-800">
+                            PDF Customization
+                          </span>
+                          <span className="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full">
+                            PRO
+                          </span>
+                        </div>
+                        <ChevronDown
+                          className={`w-4 h-4 text-slate-400 transition-transform ${showPdfSettings ? "rotate-180" : ""}`}
+                        />
+                      </button>
+
+                      {showPdfSettings && (
+                        <div className="mt-4 p-4 bg-slate-50 rounded-xl space-y-4">
+                          {/* Font Family */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-2">
+                              Font Family
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() =>
+                                  setPdfSettings({
+                                    ...pdfSettings,
+                                    fontFamily: "sans-serif",
+                                  })
+                                }
+                                className={`px-4 py-2 rounded-lg text-sm font-bold border-2 transition ${
+                                  pdfSettings.fontFamily === "sans-serif"
+                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                                    : "border-slate-200 bg-white text-slate-600"
+                                }`}
+                              >
+                                Sans-serif (Modern)
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setPdfSettings({
+                                    ...pdfSettings,
+                                    fontFamily: "serif",
+                                  })
+                                }
+                                className={`px-4 py-2 rounded-lg text-sm font-bold border-2 transition ${
+                                  pdfSettings.fontFamily === "serif"
+                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                                    : "border-slate-200 bg-white text-slate-600"
+                                }`}
+                              >
+                                Serif (Classic)
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Font Size Slider */}
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <label className="text-xs font-bold text-slate-600">
+                                Font Size
+                              </label>
+                              <span className="text-xs font-bold text-indigo-600">
+                                {pdfSettings.fontSize}pt
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="9"
+                              max="13"
+                              step="0.5"
+                              value={pdfSettings.fontSize}
+                              onChange={(e) =>
+                                setPdfSettings({
+                                  ...pdfSettings,
+                                  fontSize: parseFloat(e.target.value),
+                                })
+                              }
+                              className="w-full accent-indigo-600"
+                            />
+                            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                              <span>Small (9pt)</span>
+                              <span>Normal (11pt)</span>
+                              <span>Large (13pt)</span>
+                            </div>
+                          </div>
+
+                          {/* Line Height */}
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <label className="text-xs font-bold text-slate-600">
+                                Line Height
+                              </label>
+                              <span className="text-xs font-bold text-indigo-600">
+                                {pdfSettings.lineHeight}x
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1.2"
+                              max="1.8"
+                              step="0.1"
+                              value={pdfSettings.lineHeight}
+                              onChange={(e) =>
+                                setPdfSettings({
+                                  ...pdfSettings,
+                                  lineHeight: parseFloat(e.target.value),
+                                })
+                              }
+                              className="w-full accent-indigo-600"
+                            />
+                          </div>
+
+                          {/* Margins */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-2">
+                              Margins
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {[
+                                {
+                                  id: "compact",
+                                  label: "Compact",
+                                  desc: "More content",
+                                },
+                                {
+                                  id: "normal",
+                                  label: "Normal",
+                                  desc: "Balanced",
+                                },
+                                {
+                                  id: "spacious",
+                                  label: "Spacious",
+                                  desc: "Easy reading",
+                                },
+                              ].map((margin) => (
+                                <button
+                                  key={margin.id}
+                                  onClick={() =>
+                                    setPdfSettings({
+                                      ...pdfSettings,
+                                      margins: margin.id as any,
+                                    })
+                                  }
+                                  className={`p-2 rounded-lg border-2 transition text-center ${
+                                    pdfSettings.margins === margin.id
+                                      ? "border-indigo-500 bg-indigo-50"
+                                      : "border-slate-200 bg-white hover:border-slate-300"
+                                  }`}
+                                >
+                                  <p className="text-xs font-bold">
+                                    {margin.label}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400">
+                                    {margin.desc}
+                                  </p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Toggles */}
+                          <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200">
+                            <span className="text-sm font-medium text-slate-700">
+                              Show Page Numbers
+                            </span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={pdfSettings.showPageNumbers}
+                                onChange={(e) =>
+                                  setPdfSettings({
+                                    ...pdfSettings,
+                                    showPageNumbers: e.target.checked,
+                                  })
+                                }
+                                className="sr-only peer"
+                              />
+                              <div className="w-10 h-5 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200">
+                            <span className="text-sm font-medium text-slate-700">
+                              Start Chapters on New Page
+                            </span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={pdfSettings.chapterStartPage === "new"}
+                                onChange={(e) =>
+                                  setPdfSettings({
+                                    ...pdfSettings,
+                                    chapterStartPage: e.target.checked
+                                      ? "new"
+                                      : "same",
+                                  })
+                                }
+                                className="sr-only peer"
+                              />
+                              <div className="w-10 h-5 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                          </div>
+
+                          {/* Preview Text */}
+                          <div className="mt-4 p-3 bg-white rounded-lg border border-slate-200">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                              Live Preview
+                            </p>
+                            <p
+                              className="text-slate-700"
+                              style={{
+                                fontFamily:
+                                  pdfSettings.fontFamily === "serif"
+                                    ? "Georgia, serif"
+                                    : "Inter, sans-serif",
+                                fontSize: `${pdfSettings.fontSize}pt`,
+                                lineHeight: pdfSettings.lineHeight,
+                              }}
+                            >
+                              This is how your text will appear in the exported
+                              PDF. Pro users can customize every aspect of their
+                              ebook's typography.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* TARGET PRICE
                   <div>
                     <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
@@ -1795,12 +2092,12 @@ export default function ForgePage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-8">
+            <div className="flex gap-2 sm:gap-3 mt-6 sm:mt-8">
               <button
                 onClick={() => setStep(2)}
-                className="flex-1 border border-slate-200 text-slate-600 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:border-slate-300 transition cursor-pointer"
+                className="flex-1 border border-slate-200 text-slate-600 font-bold py-2.5 sm:py-3 rounded-xl flex items-center justify-center gap-1 sm:gap-2 hover:border-slate-300 transition cursor-pointer text-xs sm:text-sm"
               >
-                <ArrowLeft className="w-4 h-4" /> Back
+                <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" /> Back
               </button>
               <button
                 onClick={async () => {
@@ -1816,22 +2113,21 @@ export default function ForgePage() {
                   setTimeout(() => handleGenerate(false), 300);
                 }}
                 disabled={!customTitle || isCheckingLimit}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-200"
+                className="flex-[1.5] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2.5 sm:py-3 rounded-xl flex items-center justify-center gap-1 sm:gap-2 transition cursor-pointer shadow-md shadow-indigo-200 text-xs sm:text-sm"
               >
-                <Sparkles className="w-4 h-4" />
-                Generate{" "}
-                {plan === "free"
-                  ? Math.min(3, chapterCount)
-                  : chapterCount}{" "}
-                Chapters
+                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="whitespace-nowrap">
+                  Generate{" "}
+                  {plan === "free" ? Math.min(3, chapterCount) : chapterCount}{" "}
+                  Chapters
+                </span>
               </button>
             </div>
           </div>
         )}
-
         {/* ── STEP 4: Generating ── */}
         {step === 4 && (
-          <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center">
+          <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-10 text-center">
             {" "}
             <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Zap className="w-10 h-10 text-indigo-600 animate-pulse" />
@@ -1936,11 +2232,10 @@ export default function ForgePage() {
             )}
           </div>
         )}
-
         {/* ── STEP 5: Preview & Edit ── */}
         {step === 5 && editedContent && (
           <div>
-            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
               <div>
                 <h2 className="text-base font-black text-slate-900">
                   Preview & Edit
@@ -1949,9 +2244,8 @@ export default function ForgePage() {
                   Edit any section, then export your PDF
                 </p>
               </div>
-              {/* // In step 5, replace the export button section with this: */}
-
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {" "}
                 {/* Regenerate button - SIMPLE VERSION */}
                 <button
                   onClick={async () => {
@@ -1970,7 +2264,6 @@ export default function ForgePage() {
                 >
                   <RefreshCw className="w-3.5 h-3.5" /> Regenerate
                 </button>
-
                 {/* DOCX Export - Pro Only */}
                 {plan === "pro" && (
                   <button
@@ -1982,7 +2275,6 @@ export default function ForgePage() {
                     {exporting ? "..." : "DOCX"}
                   </button>
                 )}
-
                 {/* PDF Export */}
                 <button
                   onClick={handleExport}
@@ -2157,12 +2449,11 @@ export default function ForgePage() {
             </div>
           </div>
         )}
-
         {/* ── STEP 6: Done ── */}
         {step === 6 && (
           <div className="space-y-6">
             {/* Success Card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 sm:p-16 text-center">
               <div className="w-20 h-20 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Check className="w-10 h-10 text-emerald-500" />
               </div>
@@ -2196,7 +2487,7 @@ export default function ForgePage() {
                   </a>
                 ))}
               </div>
-              <div className="flex gap-3 justify-center flex-wrap">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
                 <button
                   onClick={() => router.push("/dashboard/generate")}
                   className="border border-slate-200 hover:border-indigo-300 text-slate-600 font-bold px-6 py-3 rounded-xl transition cursor-pointer text-sm"
@@ -2232,44 +2523,44 @@ export default function ForgePage() {
               </div>
             </div>
 
-            {/* Monetization Panel - Add this right after the success card */}
-            <div>
-              <button
-                onClick={() => setShowMonetization(!showMonetization)}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 hover:shadow-md transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-black text-amber-800">
-                      Monetize Your Product
-                    </p>
-                    <p className="text-xs text-amber-600">
-                      Generate sales pages, social content, and more
-                    </p>
-                  </div>
-                </div>
-                <span className="text-amber-600 text-xl">
-                  {showMonetization ? "−" : "+"}
-                </span>
-              </button>
+{/* Monetization Panel - FULLY MOBILE OPTIMIZED */}
+<div className="mt-6 sm:mt-0">
+  <button
+    onClick={() => setShowMonetization(!showMonetization)}
+    className="w-full flex items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 hover:shadow-md transition"
+  >
+    <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+        <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" />
+      </div>
+      <div className="text-left flex-1 min-w-0">
+        <p className="text-sm sm:text-base font-black text-amber-800 truncate">
+          Monetize Your Product
+        </p>
+        <p className="text-[10px] sm:text-xs text-amber-600 truncate">
+          Generate sales pages, social content, and more
+        </p>
+      </div>
+    </div>
+    <span className="text-amber-600 text-xl sm:text-2xl ml-2 shrink-0">
+      {showMonetization ? "−" : "+"}
+    </span>
+  </button>
 
-              {showMonetization && editedContent && (
-                <div className="mt-4">
-                  <MonetizationPanel
-                    ebookData={{
-                      title: editedContent.title || customTitle,
-                      subtitle: editedContent.subtitle || subtitle,
-                      chapters: editedContent.chapters || [],
-                      targetAudience: idea?.targetAudience,
-                    }}
-                    userPlan={plan}
-                  />
-                </div>
-              )}
-            </div>
+  {showMonetization && editedContent && (
+    <div className="mt-3 sm:mt-4">
+      <MonetizationPanel
+        ebookData={{
+          title: editedContent.title || customTitle,
+          subtitle: editedContent.subtitle || subtitle,
+          chapters: editedContent.chapters || [],
+          targetAudience: idea?.targetAudience,
+        }}
+        userPlan={plan}
+      />
+    </div>
+  )}
+</div>
           </div>
         )}
         {/* Upgrade Modal */}

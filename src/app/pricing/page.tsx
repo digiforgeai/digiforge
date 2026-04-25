@@ -1,12 +1,12 @@
-// app/pricing/page.tsx - UPDATED with accurate features
+// app/pricing/page.tsx - UPDATED with Coming Soon badge for AI Cover
 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Zap, Check, ArrowRight, Sparkles, X, Star, TrendingUp, Shield, Clock, GitBranch, Crown, Menu, Palette, FileText, Download } from 'lucide-react'
+import { Check, ArrowRight, Sparkles, Star, TrendingUp, Shield, Clock, GitBranch, Crown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { PLANS, type PlanId } from '@/lib/pricing/types'
+import { type PlanId } from '@/lib/pricing/types'
 
 export default function PricingPage() {
   const [currentPlan, setCurrentPlan] = useState<PlanId | null>(null)
@@ -35,7 +35,6 @@ export default function PricingPage() {
     }
   }
 
-  // Updated plans with accurate data
   const plansForDisplay = [
     {
       id: 'free',
@@ -48,13 +47,13 @@ export default function PricingPage() {
         'Basic PDF export',
         'Standard generation speed',
         'Watermark included',
+        'Community support',
       ],
       badge: null,
       cta: 'Get Started Free',
       ctaHref: '/dashboard/generate',
       highlight: false,
       popular: false,
-      comingSoon: false,
     },
     {
       id: 'starter',
@@ -62,20 +61,21 @@ export default function PricingPage() {
       price: 9,
       description: 'For casual creators ready to publish',
       features: [
-        '15 ebook generations per month', // Increased from 10
+        '15 ebook generations per month',
         'Up to 6 chapters per ebook',
         'Premium PDF layout',
         'Chapter images included',
-        'Faster generation',
+        'Faster generation speed',
         'No watermark',
         '8 accent color themes',
+        'Sales content generator',
+        'Standard support',
       ],
       badge: 'Most Popular',
       cta: 'Start Creating',
       ctaHref: '/signup?plan=starter',
       highlight: true,
       popular: true,
-      comingSoon: false,
     },
     {
       id: 'pro',
@@ -83,7 +83,7 @@ export default function PricingPage() {
       price: 19,
       description: 'For serious creators building a business',
       features: [
-        '50 ebook generations per month', // Increased from 30
+        '50 ebook generations per month',
         'Up to 12 chapters per ebook',
         'Premium PDF layout',
         'Chapter images included',
@@ -91,23 +91,23 @@ export default function PricingPage() {
         'Unlimited regenerations (free)',
         'PDF customization (fonts, layouts)',
         'Multiple export formats (PDF + DOCX)',
-        'Cover image generation',
+        'Sales content generator',
+        'AI cover generation',
         'No watermark',
+        'Priority support',
       ],
       badge: null,
       cta: 'Go Pro',
       ctaHref: '/signup?plan=pro',
       highlight: false,
       popular: false,
-      comingSoon: false,
     },
   ]
 
-  // Updated comparison table
   const comparisonFeatures = [
     { name: 'Monthly ebook generations', free: '5', starter: '15', pro: '50' },
     { name: 'Max chapters per ebook', free: '3', starter: '6', pro: '12' },
-    { name: 'PDF templates', free: '2', starter: '4', pro: '5+' },
+    { name: 'PDF templates', free: '2', starter: '4', pro: '6' },
     { name: 'Accent color themes', free: '8', starter: '8', pro: '8' },
     { name: 'Unsplash cover images', free: '✅', starter: '✅', pro: '✅' },
     { name: 'AI trend scoring', free: '✅', starter: '✅', pro: '✅' },
@@ -115,17 +115,18 @@ export default function PricingPage() {
     { name: 'Chapter images', free: '❌', starter: '✅', pro: '✅' },
     { name: 'No watermark', free: '❌', starter: '✅', pro: '✅' },
     { name: 'Priority generation speed', free: '❌', starter: '❌', pro: '✅' },
-    { name: 'PDF customization (fonts/layouts)', free: '❌', starter: '❌', pro: '✅' },
-    { name: 'Multiple export formats', free: '❌', starter: '❌', pro: '✅' },
-    { name: 'Cover image generation', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Unlimited regenerations', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'PDF customization', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'Multiple export formats (DOCX)', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'Sales content generator', free: '❌', starter: '✅', pro: '✅' },
+    { name: 'AI cover generation', free: '❌', starter: '❌', pro: '🚀 Coming Soon' },
     { name: 'Commercial use rights', free: '✅', starter: '✅', pro: '✅' },
-  { name: 'Customer Support', free: 'Community', starter: 'Standard', pro: 'Priority' },  // ← Professional
+    { name: 'Customer Support', free: 'Community', starter: 'Standard', pro: 'Priority' },
   ]
 
   return (
     <main className="min-h-screen bg-[#0a0b10] text-zinc-200">
-      {/* Navbar - same as before */}
+      {/* Navbar */}
       <nav className="sticky top-0 z-50 backdrop-blur-2xl border-b border-white/[0.05] bg-[#0f1117]/80">
         <div className="flex items-center justify-between px-4 md:px-6 py-4 md:py-5 max-w-7xl mx-auto">
           <Link href="/" className="flex items-center gap-2 md:gap-3 group cursor-pointer shrink-0">
@@ -195,7 +196,7 @@ export default function PricingPage() {
           {plansForDisplay.map((plan) => {
             const isCurrentPlan = currentPlan === plan.id
             const displayPrice = plan.price === 0 ? 'Free' : `$${plan.price}`
-const displayPeriod = plan.price === 0 ? '' : '/month'
+            const displayPeriod = plan.price === 0 ? '' : '/month'
             const isFree = plan.price === 0
             
             return (
@@ -205,7 +206,7 @@ const displayPeriod = plan.price === 0 ? '' : '/month'
                   plan.highlight
                     ? 'bg-indigo-600 border-indigo-500 shadow-2xl shadow-indigo-600/20 scale-[1.01] md:scale-[1.02]'
                     : 'bg-zinc-900/40 border-white/[0.07] hover:border-white/[0.12]'
-                } ${plan.comingSoon ? 'opacity-75' : ''}`}
+                }`}
               >
                 {plan.badge && (
                   <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] px-3 md:px-4 py-1 md:py-1.5 rounded-full flex items-center gap-1 whitespace-nowrap ${
@@ -252,9 +253,9 @@ const displayPeriod = plan.price === 0 ? '' : '/month'
                       plan.highlight
                         ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg'
                         : 'bg-white/5 hover:bg-white/10 border border-white/10 text-white'
-                    } ${plan.comingSoon ? 'pointer-events-none opacity-50' : ''}`}>
+                    }`}>
                     {plan.cta}
-                    {!plan.comingSoon && <ArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5" />}
+                    <ArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5" />
                   </Link>
                 )}
 
@@ -264,7 +265,12 @@ const displayPeriod = plan.price === 0 ? '' : '/month'
                   {plan.features.map((feat, j) => (
                     <li key={j} className="flex items-start gap-2 md:gap-2.5">
                       <Check className={`w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 mt-0.5 ${plan.highlight ? 'text-white' : 'text-indigo-400'}`} />
-                      <span className={`text-[11px] md:text-xs ${plan.highlight ? 'text-white' : 'text-zinc-400'}`}>{feat}</span>
+                      <span className={`text-[11px] md:text-xs ${plan.highlight ? 'text-white' : 'text-zinc-400'}`}>
+                        {feat}
+                        {feat === 'AI cover generation' && (
+                          <span className="ml-1.5 text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">Soon</span>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -299,7 +305,7 @@ const displayPeriod = plan.price === 0 ? '' : '/month'
                     <th className="text-center p-3 md:p-4 font-bold text-zinc-400 w-20 md:w-28">Free</th>
                     <th className="text-center p-3 md:p-4 font-bold text-indigo-400 w-20 md:w-28 bg-indigo-600/5">Starter</th>
                     <th className="text-center p-3 md:p-4 font-bold text-zinc-400 w-20 md:w-28">Pro</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody>
                   {comparisonFeatures.map((row, i) => (

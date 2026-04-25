@@ -18,6 +18,12 @@ const nextConfig = {
       },
     ],
   },
+  allowedDevOrigins: [
+    'localhost',
+    '10.67.212.73',
+    '*.local',
+  ],
+
 };
 
 export default nextConfig;
