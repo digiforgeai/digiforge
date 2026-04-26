@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { sendWelcomeEmail } from '@/lib/email/service';
+
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('')
@@ -15,24 +17,42 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const supabase = createClient()
+  
 
-  const handleSignup = async () => {
-    if (!email || !password || !fullName) return
-    if (password.length < 8) { setError('Access Key must be at least 8 characters'); return }
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`
-      }
-    })
-    if (error) setError(error.message)
-    else setSuccess(true)
-    setLoading(false)
+const handleSignup = async () => {
+  if (!email || !password || !fullName) return
+  if (password.length < 8) { setError('Access Key must be at least 8 characters'); return }
+  
+  setLoading(true)
+  setError('')
+  
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName },
+      emailRedirectTo: `${window.location.origin}/auth/callback`
+    }
+  })
+  
+  if (error) {
+    setError(error.message)
+  } else {
+    // Call the API endpoint instead of direct function
+    try {
+      await fetch('/api/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, fullName })
+      })
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError)
+    }
+    setSuccess(true)
   }
+  
+  setLoading(false)
+}
 
   const handleGoogle = async () => {
     await supabase.auth.signInWithOAuth({

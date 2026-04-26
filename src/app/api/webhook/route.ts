@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendBillingEmail } from '@/lib/email/service';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
       // Find user by customer ID
       const { data: user } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, email, full_name')
         .eq('stripe_customer_id', customerId)
         .single()
 
@@ -124,25 +125,25 @@ export async function POST(request: Request) {
       console.log(`🔄 Resetting usage for user ${userId} from ${oldPlanId} to ${newPlanId}`)
       
       // Direct update - delete and insert fresh
-const { error: usageError } = await supabase
-  .from('usage_tracking')
-  .upsert(
-    {
-      user_id: userId,
-      month: monthStr,
-      ebook_generations_used: 0,
-      updated_at: now.toISOString(),
-    },
-    {
-      onConflict: 'user_id,month',
-    }
-  )
+      const { error: usageError } = await supabase
+        .from('usage_tracking')
+        .upsert(
+          {
+            user_id: userId,
+            month: monthStr,
+            ebook_generations_used: 0,
+            updated_at: now.toISOString(),
+          },
+          {
+            onConflict: 'user_id,month',
+          }
+        )
 
-if (usageError) {
-  console.error('❌ Usage reset failed:', usageError)
-} else {
-  console.log('✅ Usage reset to 0 (UPSERT)')
-}
+      if (usageError) {
+        console.error('❌ Usage reset failed:', usageError)
+      } else {
+        console.log('✅ Usage reset to 0 (UPSERT)')
+      }
 
       // Cancel old active plan
       await supabase
@@ -193,6 +194,19 @@ if (usageError) {
       }
 
       console.log('✅ Successfully processed plan change for user:', userId)
+
+      // ✅ SEND BILLING EMAIL (inside the payment success block, after user data is available)
+      try {
+        await sendBillingEmail(
+          user.email,
+          user.full_name || user.email?.split('@')[0] || 'User',
+          newPlanId === 'starter' ? 'Starter' : 'Pro',
+          newPlanId === 'starter' ? '9.00' : '19.00'
+        );
+        console.log('📧 Billing email sent to:', user.email);
+      } catch (emailError) {
+        console.error('❌ Failed to send billing email:', emailError);
+      }
     }
 
     // =========================================================

@@ -689,6 +689,12 @@ const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
               >
                 Terms of Service
               </li>
+              <li
+                onClick={() => router.push("/cookies")}
+                className="hover:text-indigo-400 transition-colors cursor-pointer text-left"
+              >
+                Cookie Settings
+              </li>
             </ul>
           </div>
           {/* Support Column */}
