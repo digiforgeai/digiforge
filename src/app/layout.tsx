@@ -9,54 +9,68 @@ import CookieConsent from "@/components/CookieConsent";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DigiforgeAI – Create High-Converting eBooks in Minutes with AI",
-  description:
-    "Generate professional, high-quality eBooks, guides, and digital products in minutes using AI. Perfect for creators, entrepreneurs, and marketers looking to monetize fast.",
-
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://digiforgeai.app'),
+  title: {
+    default: 'DigiForgeAI - AI-Powered Ebook Generator & Digital Product Studio',
+    template: '%s | DigiForgeAI'
+  },
+  description: 'Create professional ebooks, guides, and digital products with AI. Research trends with AI scoring, generate complete ebooks, and export to PDF or DOCX. Start for free.',
   keywords: [
-    "AI ebook generator",
-    "create ebook with AI",
-    "digital product generator",
-    "ebook creator tool",
-    "make money with ebooks",
-    "AI content generator",
-    "ebook business tools",
-    "self publishing AI",
-    "sell digital products",
-    "ebook automation",
+    'AI ebook generator',
+    'digital product creator',
+    'ebook creation tool',
+    'AI content writer',
+    'make money online',
+    'digital publishing',
+    'passive income',
+    'PDF generator',
+    'AI writing assistant'
   ],
-
-  authors: [{ name: "DigiforgeAI" }],
-  creator: "DigiforgeAI",
-
+  authors: [{ name: 'DigiForgeAI', url: 'https://digiforgeai.app' }],
+  creator: 'DigiForgeAI',
+  publisher: 'DigiForgeAI',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
   openGraph: {
-    title: "Create & Sell eBooks with AI – DigiforgeAI",
-    description:
-      "Turn ideas into profitable eBooks in minutes. Generate, design, and export professional digital products effortlessly with AI.",
-    url: "https://www.digiforgeai.app",
-    siteName: "DigiforgeAI",
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://digiforgeai.app',
+    siteName: 'DigiForgeAI',
+    title: 'DigiForgeAI - AI-Powered Ebook Generator',
+    description: 'Create professional ebooks and digital products with AI. Research trends, generate content, export to PDF or DOCX.',
     images: [
       {
-        url: "https://www.digiforgeai.app/digiforge_logo.png",
+        url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: "DigiforgeAI Ebook Generator",
+        alt: 'DigiForgeAI - Forge Your Digital Products with AI',
       },
     ],
-    locale: "en_US",
-    type: "website",
   },
-
   twitter: {
-    card: "summary_large_image",
-    title: "Create eBooks with AI in Minutes",
-    description:
-      "Generate, design, and export high-quality eBooks instantly with DigiforgeAI.",
-    images: ["https://www.digiforgeai.app/digiforge_logo.png"],
+    card: 'summary_large_image',
+    site: '@digiforgeai',
+    creator: '@digiforgeai',
+    title: 'DigiForgeAI - AI-Powered Ebook Generator',
+    description: 'Create professional ebooks and digital products with AI.',
+    images: ['/og-image.png'],
   },
-
-  metadataBase: new URL("https://www.digiforgeai.app"),
-};
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon-16x16.png',
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/site.webmanifest',
+}
 
 export default function RootLayout({
   children,

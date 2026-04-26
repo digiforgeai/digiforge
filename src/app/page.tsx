@@ -32,27 +32,28 @@ import { useEffect, useState } from "react";
 
 export default function LandingPage() {
   const router = useRouter();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Add this inside your component, after the other useEffects
-useEffect(() => {
-  const carousel = document.getElementById('tech-carousel');
-  const prevBtn = document.querySelector('.carousel-prev');
-  const nextBtn = document.querySelector('.carousel-next');
-  
-  if (prevBtn && nextBtn && carousel) {
-    prevBtn.addEventListener('click', () => {
-      carousel.scrollBy({ left: -200, behavior: 'smooth' });
-    });
-    nextBtn.addEventListener('click', () => {
-      carousel.scrollBy({ left: 200, behavior: 'smooth' });
-    });
-  }
-}, []);
-
-const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    const carousel = document.getElementById('tech-carousel');
+    const prevBtn = document.querySelector('.carousel-prev');
+    const nextBtn = document.querySelector('.carousel-next');
+    
+    if (prevBtn && nextBtn && carousel) {
+      prevBtn.addEventListener('click', () => {
+        carousel.scrollBy({ left: -200, behavior: 'smooth' });
+      });
+      nextBtn.addEventListener('click', () => {
+        carousel.scrollBy({ left: 200, behavior: 'smooth' });
+      });
+    }
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#0f1117] text-zinc-200 selection:bg-indigo-500/30 font-sans cursor-default">
+      {/* SEO - Move to layout or add directly */}
+      <title>DigiForgeAI - AI-Powered Ebook Generator & Digital Product Studio</title>
+      <meta name="description" content="Forge professional ebooks and digital products with AI. Research trends, generate complete guides, and export to PDF or DOCX. Start for free today." />
       {/* Background Lighting & Textures */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[70%] h-[70%] rounded-full bg-indigo-500/10 blur-[120px]" />
