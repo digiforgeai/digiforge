@@ -654,9 +654,10 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                {/* Billing Tab - No invoice, just plan info */}
+                {/* Billing Tab - Simplified (Redirects to Pricing Page) */}
                 {activeTab === "billing" && (
                   <div className="space-y-4 sm:space-y-5">
+                    {/* Current Plan Card */}
                     <div
                       className={`rounded-xl p-4 sm:p-5 text-white ${
                         currentPlan === "free"
@@ -674,21 +675,75 @@ export default function ProfilePage() {
                       </p>
                       <p className="text-[9px] sm:text-[10px] opacity-90 mt-1">
                         {currentPlan === "free"
-                          ? "3 chapters • 1 generation/month"
+                          ? "5 generations/month • 5 chapters"
                           : currentPlan === "starter"
-                            ? "6 chapters • 15 generations/month • No watermark"
-                            : "12 chapters • 50 generations/month • Priority speed • DOCX export"}
+                            ? "15 generations/month • 6 chapters • No watermark"
+                            : "50 generations/month • 12 chapters • Priority speed • DOCX export"}
                       </p>
-                      {currentPlan !== "pro" && (
-                        <button
-                          onClick={() => router.push("/pricing")}
-                          className="mt-3 sm:mt-4 bg-white/20 hover:bg-white/30 text-white font-bold py-1.5 px-3 rounded-lg text-[9px] sm:text-[10px] transition"
-                        >
-                          Upgrade to Pro →
-                        </button>
-                      )}
                     </div>
 
+                    {/* Plan Features Summary */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">
+                        Plan Features
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-slate-600">
+                            Monthly generations
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">
+                            {currentPlan === "free"
+                              ? "5"
+                              : currentPlan === "starter"
+                                ? "15"
+                                : "50"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-slate-600">
+                            Max chapters per ebook
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">
+                            {currentPlan === "free"
+                              ? "5"
+                              : currentPlan === "starter"
+                                ? "6"
+                                : "12"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-slate-600">
+                            Watermark free
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">
+                            {currentPlan === "free" ? "❌" : "✅"}
+                          </span>
+                        </div>
+                        {currentPlan === "pro" && (
+                          <>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-slate-600">
+                                Priority generation
+                              </span>
+                              <span className="text-xs font-bold text-slate-900">
+                                ✅
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-slate-600">
+                                DOCX export
+                              </span>
+                              <span className="text-xs font-bold text-slate-900">
+                                ✅
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Billing Summary */}
                     <div className="bg-slate-50 rounded-xl p-4 sm:p-5">
                       <div className="flex items-center justify-between">
                         <div>
@@ -706,15 +761,34 @@ export default function ProfilePage() {
                             : currentPlan === "starter"
                               ? "9"
                               : "19"}
-                          .00
+                          .00/month
                         </p>
                       </div>
                     </div>
 
+                    {/* Manage Subscription Button - Redirects to Pricing */}
+                    <button
+                      onClick={() => router.push("/pricing")}
+                      className="cursor-pointer w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 sm:py-3.5 rounded-xl text-[11px] sm:text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      {currentPlan === "free"
+                        ? "Upgrade to Starter"
+                        : currentPlan === "starter"
+                          ? "Upgrade to Pro"
+                          : "Manage Subscription"}
+                    </button>
+
+                    {/* Support Contact */}
                     <div className="bg-indigo-50 rounded-xl p-3 sm:p-4 text-center">
                       <p className="text-[9px] sm:text-[10px] text-indigo-700">
-                        💡 Need to manage your subscription or download
-                        invoices? Contact support.
+                        💡 Need help with billing?{" "}
+                        <a
+                          href="mailto:support@digiforgeai.app"
+                          className="cursor-pointer font-bold underline"
+                        >
+                          Contact support
+                        </a>
                       </p>
                     </div>
                   </div>

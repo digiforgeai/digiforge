@@ -1,18 +1,25 @@
-// app/pricing/page.tsx - UPDATED with Coming Soon badge for AI Cover
 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, ArrowRight, Sparkles, Star, TrendingUp, Shield, Clock, GitBranch, Crown } from 'lucide-react'
+import { Check, ArrowRight, Sparkles, Star, TrendingUp, Shield, Clock, GitBranch, Crown, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { type PlanId } from '@/lib/pricing/types'
+import { getStripe } from '@/lib/stripe/client'
+import { PLANS, type PlanId } from '@/lib/pricing/types'
 
 export default function PricingPage() {
   const [currentPlan, setCurrentPlan] = useState<PlanId | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
   const [showComparison, setShowComparison] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const supabase = createClient()
+
+  // REPLACE THESE WITH YOUR ACTUAL STRIPE PRICE IDs from Stripe Dashboard
+  const STRIPE_PRICE_IDS = {
+    starter: 'price_1TQSsSE2zT1ZW697eKmV3f2Q',
+    pro: 'price_1TQStCE2zT1ZW697KoYjpPGv',
+  }
 
   useEffect(() => {
     fetchCurrentPlan()
@@ -23,7 +30,7 @@ export default function PricingPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: subscription } = await supabase
-          .from('user_subscriptions')
+          .from('user_plans')
           .select('plan_id')
           .eq('user_id', user.id)
           .eq('status', 'active')
@@ -35,93 +42,80 @@ export default function PricingPage() {
     }
   }
 
+  const handleSubscribe = async (planId: string, priceId: string) => {
+    setLoadingPlan(planId)
+    
+    try {
+      const response = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId, planId }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        throw new Error('No checkout URL returned')
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      alert('Something went wrong. Please try again.')
+    } finally {
+      setLoadingPlan(null)
+    }
+  }
+
   const plansForDisplay = [
     {
       id: 'free',
-      name: 'Free',
-      price: 0,
-      description: 'Perfect for trying out DigiForge',
-      features: [
-        '5 ebook generations per month',
-        'Up to 3 chapters per ebook',
-        'Basic PDF export',
-        'Standard generation speed',
-        'Watermark included',
-        'Community support',
-      ],
+      name: PLANS.free.name,
+      price: PLANS.free.price,
+      description: PLANS.free.description,
+      features: PLANS.free.features,
       badge: null,
       cta: 'Get Started Free',
-      ctaHref: '/dashboard/generate',
+      priceId: null,
       highlight: false,
-      popular: false,
     },
     {
       id: 'starter',
-      name: 'Starter',
-      price: 9,
-      description: 'For casual creators ready to publish',
-      features: [
-        '15 ebook generations per month',
-        'Up to 6 chapters per ebook',
-        'Premium PDF layout',
-        'Chapter images included',
-        'Faster generation speed',
-        'No watermark',
-        '8 accent color themes',
-        'Sales content generator',
-        'Standard support',
-      ],
+      name: PLANS.starter.name,
+      price: PLANS.starter.price,
+      description: PLANS.starter.description,
+      features: PLANS.starter.features,
       badge: 'Most Popular',
-      cta: 'Start Creating',
-      ctaHref: '/signup?plan=starter',
+      cta: 'Subscribe Now',
+      priceId: STRIPE_PRICE_IDS.starter,
       highlight: true,
-      popular: true,
     },
     {
       id: 'pro',
-      name: 'Pro',
-      price: 19,
-      description: 'For serious creators building a business',
-      features: [
-        '50 ebook generations per month',
-        'Up to 12 chapters per ebook',
-        'Premium PDF layout',
-        'Chapter images included',
-        'Priority generation speed',
-        'Unlimited regenerations (free)',
-        'PDF customization (fonts, layouts)',
-        'Multiple export formats (PDF + DOCX)',
-        'Sales content generator',
-        'AI cover generation',
-        'No watermark',
-        'Priority support',
-      ],
+      name: PLANS.pro.name,
+      price: PLANS.pro.price,
+      description: PLANS.pro.description,
+      features: PLANS.pro.features,
       badge: null,
-      cta: 'Go Pro',
-      ctaHref: '/signup?plan=pro',
+      cta: 'Subscribe Now',
+      priceId: STRIPE_PRICE_IDS.pro,
       highlight: false,
-      popular: false,
     },
   ]
 
   const comparisonFeatures = [
-    { name: 'Monthly ebook generations', free: '5', starter: '15', pro: '50' },
-    { name: 'Max chapters per ebook', free: '3', starter: '6', pro: '12' },
-    { name: 'PDF templates', free: '2', starter: '4', pro: '6' },
-    { name: 'Accent color themes', free: '8', starter: '8', pro: '8' },
-    { name: 'Unsplash cover images', free: '✅', starter: '✅', pro: '✅' },
-    { name: 'AI trend scoring', free: '✅', starter: '✅', pro: '✅' },
+    { name: 'Monthly ebook generations', free: PLANS.free.limits.ebookGenerationsPerMonth, starter: PLANS.starter.limits.ebookGenerationsPerMonth, pro: PLANS.pro.limits.ebookGenerationsPerMonth },
+    { name: 'Max chapters per ebook', free: PLANS.free.limits.maxChapters, starter: PLANS.starter.limits.maxChapters, pro: PLANS.pro.limits.maxChapters },
     { name: 'Premium PDF layout', free: '❌', starter: '✅', pro: '✅' },
     { name: 'Chapter images', free: '❌', starter: '✅', pro: '✅' },
     { name: 'No watermark', free: '❌', starter: '✅', pro: '✅' },
     { name: 'Priority generation speed', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Unlimited regenerations', free: '❌', starter: '❌', pro: '✅' },
     { name: 'PDF customization', free: '❌', starter: '❌', pro: '✅' },
-    { name: 'Multiple export formats (DOCX)', free: '❌', starter: '❌', pro: '✅' },
+    { name: 'DOCX export', free: '❌', starter: '❌', pro: '✅' },
     { name: 'Sales content generator', free: '❌', starter: '✅', pro: '✅' },
     { name: 'AI cover generation', free: '❌', starter: '❌', pro: '🚀 Coming Soon' },
     { name: 'Commercial use rights', free: '✅', starter: '✅', pro: '✅' },
-    { name: 'Customer Support', free: 'Community', starter: 'Standard', pro: 'Priority' },
   ]
 
   return (
@@ -195,8 +189,6 @@ export default function PricingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
           {plansForDisplay.map((plan) => {
             const isCurrentPlan = currentPlan === plan.id
-            const displayPrice = plan.price === 0 ? 'Free' : `$${plan.price}`
-            const displayPeriod = plan.price === 0 ? '' : '/month'
             const isFree = plan.price === 0
             
             return (
@@ -229,11 +221,11 @@ export default function PricingPage() {
                   </p>
                   <div className="flex items-end gap-1 mb-2">
                     <span className={`text-3xl md:text-4xl lg:text-5xl font-black tracking-tighter ${plan.highlight ? 'text-white' : 'text-white'}`}>
-                      {isFree ? 'Free' : displayPrice}
+                      {isFree ? 'Free' : `$${plan.price}`}
                     </span>
                     {!isFree && (
                       <span className={`text-xs md:text-sm font-medium mb-1 md:mb-2 ${plan.highlight ? 'text-indigo-100' : 'text-zinc-600'}`}>
-                        {displayPeriod}
+                        /month
                       </span>
                     )}
                   </div>
@@ -247,16 +239,40 @@ export default function PricingPage() {
                     <Check className="w-3.5 h-3.5" />
                     Current Plan
                   </div>
-                ) : (
-                  <Link href={plan.ctaHref}
+                ) : isFree ? (
+                  <Link
+                    href="/dashboard/generate"
                     className={`w-full flex items-center justify-center gap-2 font-black py-3 rounded-xl text-xs md:text-sm transition mb-6 md:mb-8 uppercase tracking-widest ${
                       plan.highlight
                         ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg'
                         : 'bg-white/5 hover:bg-white/10 border border-white/10 text-white'
-                    }`}>
+                    }`}
+                  >
                     {plan.cta}
                     <ArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5" />
                   </Link>
+                ) : (
+                  <button
+                    onClick={() => handleSubscribe(plan.id, plan.priceId!)}
+                    disabled={loadingPlan === plan.id}
+                    className={`w-full flex items-center justify-center gap-2 font-black py-3 rounded-xl text-xs md:text-sm transition mb-6 md:mb-8 uppercase tracking-widest ${
+                      plan.highlight
+                        ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {loadingPlan === plan.id ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        {plan.cta}
+                        <ArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                      </>
+                    )}
+                  </button>
                 )}
 
                 <div className={`h-px mb-4 md:mb-6 ${plan.highlight ? 'bg-white/20' : 'bg-white/[0.06]'}`} />
@@ -267,7 +283,7 @@ export default function PricingPage() {
                       <Check className={`w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 mt-0.5 ${plan.highlight ? 'text-white' : 'text-indigo-400'}`} />
                       <span className={`text-[11px] md:text-xs ${plan.highlight ? 'text-white' : 'text-zinc-400'}`}>
                         {feat}
-                        {feat === 'AI cover generation' && (
+                        {feat === 'AI cover image generation' && (
                           <span className="ml-1.5 text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">Soon</span>
                         )}
                       </span>
@@ -305,7 +321,7 @@ export default function PricingPage() {
                     <th className="text-center p-3 md:p-4 font-bold text-zinc-400 w-20 md:w-28">Free</th>
                     <th className="text-center p-3 md:p-4 font-bold text-indigo-400 w-20 md:w-28 bg-indigo-600/5">Starter</th>
                     <th className="text-center p-3 md:p-4 font-bold text-zinc-400 w-20 md:w-28">Pro</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody>
                   {comparisonFeatures.map((row, i) => (
@@ -327,7 +343,7 @@ export default function PricingPage() {
           <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8">
             <div className="flex items-center gap-2 text-zinc-600 text-[11px] md:text-sm">
               <Shield className="w-3.5 h-3.5 md:w-4 md:h-4" />
-              <span>30-day money-back guarantee</span>
+              <span>Secure payment powered by Stripe</span>
             </div>
             <div className="flex items-center gap-2 text-zinc-600 text-[11px] md:text-sm">
               <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />

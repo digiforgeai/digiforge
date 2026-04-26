@@ -171,23 +171,32 @@ console.log(`⚡ Priority mode: ${isPriority ? 'ACTIVE (Pro user)' : 'OFF'}`);
   }
 
   // ========== Check monthly generation limit ==========
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
+// Replace the usage check section with this:
+const startOfMonth = new Date();
+startOfMonth.setDate(1);
+startOfMonth.setHours(0, 0, 0, 0);
+const monthStr = startOfMonth.toISOString().split('T')[0];
 
-  const { count: monthlyCount } = await supabase
-    .from("generated_ebooks")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("generated_at", startOfMonth.toISOString());
+console.log('Checking usage for month:', monthStr);
 
-  const monthlyLimit = userPlan === 'free' ? 5 : userPlan === 'starter' ? 15 : 50;
+const { data: usageData } = await supabase
+  .from('usage_tracking')
+  .select('ebook_generations_used')
+  .eq('user_id', user.id)
+  .eq('month', monthStr)
+  .single();
 
-  const remaining = Math.max(0, monthlyLimit - (monthlyCount || 0));
+const used = usageData?.ebook_generations_used || 0;
+console.log('Current usage:', used);
+
+const monthlyLimit = userPlan === 'free' ? 5 : userPlan === 'starter' ? 15 : 50;
+const remaining = Math.max(0, monthlyLimit - used);
+console.log('Monthly limit:', monthlyLimit, 'Remaining:', remaining);
 
   // 🔥 PRO PLAN: Don't check limits on regeneration
 const isProRegenerate = userPlan === 'pro' && isRegenerate === true;
 
+// Skip limit check for Pro regenerations
 if (!isProRegenerate && remaining <= 0) {
   return NextResponse.json(
     {
@@ -538,8 +547,30 @@ No markdown, no bold.`;
           .replace(/\*\*/g, "")
           .replace(/\*/g, "");
 
-        // ========== AFTER SUCCESSFUL GENERATION, INCREMENT USAGE ==========
-        await incrementUsage(user.id);
+// ========== AFTER SUCCESSFUL GENERATION, INCREMENT USAGE ==========
+// 🔥 PRO PLAN: Regenerations should NOT count towards usage
+const isProRegenerate = userPlan === 'pro' && isRegenerate === true;
+
+if (!isProRegenerate) {
+  console.log('USAGE BEFORE:', used);
+  await incrementUsage(user.id);
+  console.log('=== DEBUG USAGE ===');
+  const { data: after } = await supabase
+    .from('usage_tracking')
+    .select('*')
+    .eq('user_id', user.id);
+  console.log('Usage after increment:', after);
+} else {
+  console.log('🔥 Pro user regenerating - NOT counting towards usage');
+}
+
+        // After incrementUsage, add this debug
+console.log('=== DEBUG USAGE ===');
+const { data: after } = await supabase
+  .from('usage_tracking')
+  .select('*')
+  .eq('user_id', user.id);
+console.log('Usage after increment:', after);
 
         send("done", {
           content: {
@@ -572,9 +603,6 @@ No markdown, no bold.`;
       }
     },
   });
-  if (!(userPlan === 'pro' && isRegenerate === true)) {
-  await incrementUsage(user.id);
-}
 
   return new Response(stream, {
     headers: {

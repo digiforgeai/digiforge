@@ -1,10 +1,10 @@
-// lib/subscription/server.ts - SERVER-SIDE ONLY
+// lib/subscription/server.ts
 import { createClient } from '@/lib/supabase/server'
 import { PLAN_LIMITS, type PlanId, type UserPlan } from './types'
 
 // Get user's current plan (server-side)
 export async function getUserPlan(userId: string): Promise<UserPlan | null> {
-  const supabase = await createClient()  // ← ADD AWAIT HERE
+  const supabase = await createClient()
   
   const { data, error } = await supabase
     .from('user_plans')
@@ -26,7 +26,7 @@ export async function canGenerateEbook(userId: string): Promise<{
   limit: number
   planId: PlanId
 }> {
-  const supabase = await createClient()  // ← ADD AWAIT HERE
+  const supabase = await createClient()
   
   // Get user's plan
   let planId: PlanId = 'free'
@@ -41,18 +41,20 @@ export async function canGenerateEbook(userId: string): Promise<{
   
   const limit = PLAN_LIMITS[planId].ebookGenerationsPerMonth
   
-  // Get usage for current month
+  // Get usage from usage_tracking table
   const startOfMonth = new Date()
   startOfMonth.setDate(1)
   startOfMonth.setHours(0, 0, 0, 0)
+  const monthStr = startOfMonth.toISOString().split('T')[0]
   
-  const { count } = await supabase
-    .from('generated_ebooks')
-    .select('*', { count: 'exact', head: true })
+  const { data: usageData } = await supabase
+    .from('usage_tracking')
+    .select('ebook_generations_used')
     .eq('user_id', userId)
-    .gte('created_at', startOfMonth.toISOString())
+    .eq('month', monthStr)
+    .single()
   
-  const used = count || 0
+  const used = usageData?.ebook_generations_used || 0
   const remaining = Math.max(0, limit - used)
   
   return {
@@ -63,15 +65,47 @@ export async function canGenerateEbook(userId: string): Promise<{
   }
 }
 
-// Increment usage after generation
+// SIMPLE WORKING increment usage - NO RPC function needed
 export async function incrementUsage(userId: string): Promise<void> {
-  const supabase = await createClient()  // ← ADD AWAIT HERE
-  const currentMonth = new Date()
-  currentMonth.setDate(1)
-  currentMonth.setHours(0, 0, 0, 0)
+  const supabase = await createClient()
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+  const monthStr = startOfMonth.toISOString().split('T')[0]
   
-  await supabase.rpc('increment_ebook_usage', {
-    p_user_id: userId,
-    p_month: currentMonth.toISOString(),
-  })
+  console.log('Incrementing usage for user:', userId, 'month:', monthStr);
+  
+  // Get current usage
+  const { data: currentUsage } = await supabase
+    .from('usage_tracking')
+    .select('ebook_generations_used')
+    .eq('user_id', userId)
+    .eq('month', monthStr)
+    .single()
+  
+  const currentCount = currentUsage?.ebook_generations_used || 0
+  const newCount = currentCount + 1
+  
+  console.log('Current usage:', currentCount, 'New usage:', newCount);
+  
+  // Upsert - update if exists, insert if not
+  const { error } = await supabase
+    .from('usage_tracking')
+    .upsert(
+      {
+        user_id: userId,
+        month: monthStr,
+        ebook_generations_used: newCount,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'user_id,month',
+      }
+    )
+  
+  if (error) {
+    console.error('Error incrementing usage:', error);
+  } else {
+    console.log('Usage incremented successfully to:', newCount);
+  }
 }

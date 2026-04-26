@@ -169,8 +169,16 @@ export default function ForgePage() {
       return "medium";
     },
   );
-  const [pdfTemplate, setPdfTemplate] = useState<string>("premium");
-  const [exportProgress, setExportProgress] = useState(0);
+const [pdfTemplate, setPdfTemplate] = useState<string>(() => {
+  // Set default template based on plan
+  if (typeof window !== "undefined") {
+    const userPlan = localStorage.getItem("user-plan") || "free";
+    if (userPlan === "free") return "classic";
+    if (userPlan === "starter") return "premium";
+    if (userPlan === "pro") return "editorial";
+  }
+  return "classic";
+});  const [exportProgress, setExportProgress] = useState(0);
   const [theme, setTheme] = useState("indigo");
   const [template, setTemplate] = useState("modern");
   const [photos, setPhotos] = useState<any[]>([]);
@@ -199,6 +207,9 @@ export default function ForgePage() {
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [isCheckingLimit, setIsCheckingLimit] = useState(false);
   const [showPdfSettings, setShowPdfSettings] = useState(false);
+  const [isRestoringFromLibrary, setIsRestoringFromLibrary] = useState(false);
+  const [originalChapterCount, setOriginalChapterCount] = useState<number | null>(null);
+
 
   const {
     plan,
@@ -299,110 +310,121 @@ export default function ForgePage() {
   }, []);
 
   // ========== SIMPLE INITIALIZATION - RUNS ONCE ==========
-  useEffect(() => {
-    console.log("=== FORGE PAGE INITIALIZATION ===");
+useEffect(() => {
+  console.log("=== FORGE PAGE INITIALIZATION ===");
 
-    // Check for library restore first
-    const restoredEbook = sessionStorage.getItem("forge_restore_ebook");
-    console.log("forge_restore_ebook:", restoredEbook);
+  // Check for library restore first
+  const restoredEbook = sessionStorage.getItem("forge_restore_ebook");
+  console.log("forge_restore_ebook:", restoredEbook);
 
-    if (restoredEbook) {
-      try {
-        const ebook = JSON.parse(restoredEbook);
-        console.log("Restoring from library:", ebook.title);
+  if (restoredEbook) {
+    try {
+      const ebook = JSON.parse(restoredEbook);
+      console.log("Restoring from library:", ebook.title, "Original Chapters:", ebook.chapterCount);
+      
+      // Set flag and store original chapter count
+      setIsRestoringFromLibrary(true);
+      setOriginalChapterCount(ebook.chapterCount || 6);
+      
+      // Set the exact chapter count from the ebook
+      setChapterCount(ebook.chapterCount || 6);
+      
+      // Set other data
+      setCustomTitle(ebook.title);
+      setSubtitle(ebook.subtitle || "");
+      setEditedContent(ebook.content);
+      setContent(ebook.content);
+      setTheme(ebook.theme || "indigo");
+      setPdfTemplate(ebook.template || "premium");
+      
+      // Set book length based on chapter count
+      if (ebook.chapterCount <= 4) setBookLength("short");
+      else if (ebook.chapterCount <= 8) setBookLength("medium");
+      else setBookLength("long");
 
-        // Set flag that this is from library (not a new generation)
-        sessionStorage.setItem("isFromLibrary", "true");
-
-        // Restore all the data
-        setCustomTitle(ebook.title);
-        setSubtitle(ebook.subtitle || "");
-        setEditedContent(ebook.content);
-        setContent(ebook.content);
-        setTheme(ebook.theme || "indigo");
-        setPdfTemplate(ebook.template || "premium");
-        setChapterCount(ebook.chapterCount || 6);
-
-        if (ebook.coverImageUrl) {
-          setSelectedPhoto({
-            urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl },
-          });
-        }
-
-        // Store the ebook ID for reference (no regeneration tracking needed anymore)
-        if (ebook.id) {
-          setCurrentEbookId(ebook.id);
-        }
-
-        setIdea({
-          title: ebook.title,
-          angle: ebook.subtitle || "",
-          targetAudience: ebook.niche || "Readers",
-          forgeScore: 85,
-          trend: "Hot",
-          niche: ebook.niche || "General",
+      if (ebook.coverImageUrl) {
+        setSelectedPhoto({
+          urls: { regular: ebook.coverImageUrl, small: ebook.coverImageUrl },
         });
+      }
 
-        // Jump to step 5 (preview & edit)
-        setStep(5);
+      if (ebook.id) {
+        setCurrentEbookId(ebook.id);
+      }
 
-        // Clear the session storage
-        sessionStorage.removeItem("forge_restore_ebook");
+      setIdea({
+        title: ebook.title,
+        angle: ebook.subtitle || "",
+        targetAudience: ebook.niche || "Readers",
+        forgeScore: 85,
+        trend: "Hot",
+        niche: ebook.niche || "General",
+      });
 
-        toast.success(`Loaded "${ebook.title}" successfully`);
+      setStep(5);
+      sessionStorage.removeItem("forge_restore_ebook");
+      toast.success(`Loaded "${ebook.title}" successfully`);
+      return;
+    } catch (err) {
+      console.error("Failed to restore ebook:", err);
+      sessionStorage.removeItem("forge_restore_ebook");
+      setIsRestoringFromLibrary(false);
+    }
+  }
+
+  // Check for regular forge idea (from generate page)
+  const stored = sessionStorage.getItem("forgeIdea");
+  console.log("forgeIdea:", stored);
+
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      console.log("Found forge idea:", parsed.title);
+
+      if (parsed.title) {
+        setIdea(parsed);
+        setCustomTitle(parsed.title);
+        setSubtitle(parsed.angle || "");
+        if (parsed.theme) setTheme(parsed.theme);
+        if (parsed.niche) fetchPhotos(parsed.niche);
         return;
-      } catch (err) {
-        console.error("Failed to restore ebook:", err);
-        sessionStorage.removeItem("forge_restore_ebook");
-        sessionStorage.removeItem("isFromLibrary");
       }
+    } catch (err) {
+      console.error("Failed to parse forge idea:", err);
     }
+  }
 
-    // Check for regular forge idea (from generate page)
-    const stored = sessionStorage.getItem("forgeIdea");
-    console.log("forgeIdea:", stored);
+  // If we get here, no valid data found
+  console.log("No valid data found, showing error");
+  setForgeError("No product selected. Please generate or select an idea first.");
+}, []);
 
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        console.log("Found forge idea:", parsed.title);
-
-        // Clear any library flag
-        sessionStorage.removeItem("isFromLibrary");
-
-        if (parsed.title) {
-          setIdea(parsed);
-          setCustomTitle(parsed.title);
-          setSubtitle(parsed.angle || "");
-          if (parsed.theme) setTheme(parsed.theme);
-          if (parsed.niche) fetchPhotos(parsed.niche);
-          return; // Success - exit
-        }
-      } catch (err) {
-        console.error("Failed to parse forge idea:", err);
-      }
-    }
-
-    // If we get here, no valid data found
-    console.log("No valid data found, showing error");
-    setForgeError(
-      "No product selected. Please generate or select an idea first.",
-    );
-  }, []);
-
-  // Add this useEffect to reset chapter count when plan loads
-  useEffect(() => {
-    if (plan === "free") {
-      setChapterCount(3);
-      setBookLength("short"); // ← Force short length for free users
-    } else if (plan === "starter") {
-      setChapterCount(4);
-      setBookLength("medium"); // ← Default to medium for starter
-    } else if (plan === "pro") {
-      setChapterCount(6);
-      setBookLength("medium");
-    }
-  }, [plan]);
+// Add this useEffect to reset chapter count when plan loads (ONLY for new creations)
+// Add this useEffect to reset chapter count when plan loads (ONLY for new creations)
+useEffect(() => {
+  // If we're restoring from library, use the original chapter count
+  if (isRestoringFromLibrary && originalChapterCount) {
+    console.log("Restoring from library, keeping original chapter count:", originalChapterCount);
+    setChapterCount(originalChapterCount);
+    // Also set book length based on original chapter count
+    if (originalChapterCount <= 4) setBookLength("short");
+    else if (originalChapterCount <= 8) setBookLength("medium");
+    else setBookLength("long");
+    return;
+  }
+  
+  // Only apply to new creations
+  if (plan === "free") {
+    setChapterCount(3);
+    setBookLength("short");
+  } else if (plan === "starter") {
+    setChapterCount(4);
+    setBookLength("medium");
+  } else if (plan === "pro") {
+    setChapterCount(6);
+    setBookLength("medium");
+  }
+}, [plan, isRestoringFromLibrary, originalChapterCount]);
 
   // Load saved settings from localStorage on mount
   useEffect(() => {

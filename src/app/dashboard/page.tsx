@@ -14,7 +14,7 @@ async function getUserPlanAndUsage(userId: string) {
   // Get user's plan
   const { data: planData } = await supabase
     .from('user_plans')
-    .select('plan_id, status')
+    .select('plan_id, status, usage_reset_at, current_period_start')
     .eq('user_id', userId)
     .eq('status', 'active')
     .single()
@@ -30,18 +30,41 @@ async function getUserPlanAndUsage(userId: string) {
   
   const currentPlan = planLimits[planId as keyof typeof planLimits] || planLimits.free
   
-  // Get usage for current month
+  // ✅ IMPORTANT: Get usage from usage_tracking table, NOT from counting ebooks directly
   const startOfMonth = new Date()
   startOfMonth.setDate(1)
   startOfMonth.setHours(0, 0, 0, 0)
   
+  const { data: usageData } = await supabase
+    .from('usage_tracking')
+    .select('ebook_generations_used')
+    .eq('user_id', userId)
+    .eq('month', startOfMonth.toISOString().split('T')[0].split('T')[0])
+    .single()
+  
+  // If no usage record exists, count from generated_ebooks and create one
+  let used = usageData?.ebook_generations_used || 0
+  
+// ✅ Only fallback if NO RECORD exists (not when used === 0)
+if (!usageData) {
   const { count } = await supabase
     .from('generated_ebooks')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .gte('generated_at', startOfMonth.toISOString())
+    .gte('generated_at', startOfMonth.toISOString().split('T')[0].split('T')[0])
+
+  used = count || 0
+
+  await supabase
+    .from('usage_tracking')
+    .upsert({
+      user_id: userId,
+      month: startOfMonth.toISOString().split('T')[0].split('T')[0],
+      ebook_generations_used: used,
+      updated_at: new Date().toISOString(),
+    })
+}
   
-  const used = count || 0
   const remaining = Math.max(0, currentPlan.limit - used)
   const percentUsed = (used / currentPlan.limit) * 100
   
@@ -336,8 +359,15 @@ export default async function DashboardHome() {
           </Link>
         </div>
 
+        {/* ── Simple Refresh Notice (SaaS Standard) ── */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-blue-700">
+            💡 Plan updated? If you just upgraded, <Link href="/dashboard" className="font-bold underline">click here to refresh</Link> or simply refresh the page.
+          </p>
+        </div>
+
         {/* ── Step-by-Step Guide ── */}
-        <div className="bg-white border border-slate-200 rounded-[32px] shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-[32px] shadow-sm overflow-hidden mt-7">
           <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100">
             <div>
               <h2 className="font-black text-slate-900 text-lg tracking-tight">The Forge Workflow</h2>

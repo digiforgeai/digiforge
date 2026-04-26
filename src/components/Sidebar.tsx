@@ -99,74 +99,78 @@ function SidebarContent({ onClose, hideLogo }: { onClose?: () => void; hideLogo?
   const [usage, setUsage] = useState({ used: 0, limit: 15, plan: 'starter', remaining: 15 })
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function fetchUserData() {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser()
-        
-        if (error?.message?.includes("lock") || error?.message?.includes("stole")) {
-          console.warn("Auth lock error ignored")
-          return
-        }
-        
-        if (user) {
-          // Get profile data
-          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-          
-          // Get user plan
-          const { data: planData } = await supabase
-            .from('user_plans')
-            .select('plan_id')
-            .eq('user_id', user.id)
-            .eq('status', 'active')
-            .single()
-          
-          const plan = planData?.plan_id || 'starter'
-          
-          // Set limits based on plan
-          let limit = 15 // starter default
-          if (plan === 'free') limit = 5
-          if (plan === 'pro') limit = 50
-          
-          // Get generations used this month
-          const startOfMonth = new Date()
-          startOfMonth.setDate(1)
-          startOfMonth.setHours(0, 0, 0, 0)
-          
-          const { count } = await supabase
-            .from('generated_ebooks')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .gte('generated_at', startOfMonth.toISOString())
-          
-          const used = count || 0
-          const remaining = Math.max(0, limit - used)
-          
-          setProfile({
-            name: data?.full_name || user.email?.split('@')[0] || 'User',
-            email: user.email || '',
-            avatar: data?.avatar_url || ''
-          })
-          
-          setUsage({
-            used: used,
-            limit: limit,
-            plan: plan,
-            remaining: remaining
-          })
-        }
-      } catch (err: any) {
-        if (err?.message?.includes("lock") || err?.message?.includes("stole")) {
-          console.warn("Auth lock error caught and ignored")
-          return
-        }
-        console.error("Failed to fetch user:", err)
-      } finally {
-        setLoading(false)
+useEffect(() => {
+  async function fetchUserData() {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      
+      if (error?.message?.includes("lock") || error?.message?.includes("stole")) {
+        console.warn("Auth lock error ignored")
+        return
       }
+      
+      if (user) {
+        // Get profile data
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        
+        // Get user plan
+        const { data: planData } = await supabase
+          .from('user_plans')
+          .select('plan_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .single()
+        
+        const plan = planData?.plan_id || 'free'
+        
+        // Set limits based on plan
+        let limit = 5 // free default
+        if (plan === 'starter') limit = 15
+        if (plan === 'pro') limit = 50
+        
+        // ✅ Get used count from usage_tracking table
+        const startOfMonth = new Date()
+        startOfMonth.setDate(1)
+        startOfMonth.setHours(0, 0, 0, 0)
+        const monthStr = startOfMonth.toISOString().split('T')[0]
+        
+        const { data: usageData } = await supabase
+          .from('usage_tracking')
+          .select('ebook_generations_used')
+          .eq('user_id', user.id)
+          .eq('month', monthStr)
+          .single()
+        
+        const used = usageData?.ebook_generations_used || 0
+        const remaining = Math.max(0, limit - used)
+        
+        setProfile({
+          name: data?.full_name || user.email?.split('@')[0] || 'User',
+          email: user.email || '',
+          avatar: data?.avatar_url || ''
+        })
+        
+        setUsage({
+          used: used,
+          limit: limit,
+          plan: plan,
+          remaining: remaining
+        })
+        
+        console.log('Sidebar usage:', { plan, used, limit, remaining });
+      }
+    } catch (err: any) {
+      if (err?.message?.includes("lock") || err?.message?.includes("stole")) {
+        console.warn("Auth lock error caught and ignored")
+        return
+      }
+      console.error("Failed to fetch user:", err)
+    } finally {
+      setLoading(false)
     }
-    fetchUserData()
-  }, [])
+  }
+  fetchUserData()
+}, [])
 
   const handleLogout = async () => {
     const supabase = createClient()
