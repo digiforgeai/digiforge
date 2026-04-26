@@ -20,29 +20,27 @@ const links = [
 
 function Logo() {
   return (
-    <div className="flex items-center gap-3">
-      <div className="relative">
-        <div className="absolute inset-0 bg-indigo-500 rounded-xl blur-md opacity-50" />
-        <div className="relative rounded-xl p-1.5 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg flex items-center justify-center">
-          <Image 
-            src="/digiforge_logo.png" 
-            alt="DigiForge Logo" 
-            width={18} 
-            height={18} 
-            className="object-contain"
-            priority
-          />
-        </div>
-      </div>
-      <div className="leading-tight">
-        <span className="font-black text-[16px] tracking-tight bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent">
-          DigiForge<span className="text-indigo-400">AI</span>
-        </span>
-        <p className="text-[8px] text-slate-500 font-bold uppercase tracking-[0.25em] mt-0.5">
-          Product Studio
-        </p>
-      </div>
-    </div>
+    <Link href="/" className="flex items-center gap-3 group cursor-pointer">
+  <div className="rounded-xl p-1.5 shadow-lg shadow-indigo-900/60 flex items-center justify-center overflow-hidden bg-white/5 group-hover:bg-white/10 transition-all duration-300">
+    <Image 
+      src="/digiforge_logo.png" 
+      alt="DigiForge Logo" 
+      width={20} 
+      height={20} 
+      style={{ width: 'auto', height: 'auto' }}
+      className="object-contain md:w-6 md:h-6"
+      priority
+    />
+  </div>
+  <div>
+    <span className="font-black text-[15px] tracking-tight text-white">
+      DigiForge<span className="text-indigo-400">AI</span>
+    </span>
+    <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.2em] mt-0.5">
+      Product Studio
+    </p>
+  </div>
+</Link>
   )
 }
 
