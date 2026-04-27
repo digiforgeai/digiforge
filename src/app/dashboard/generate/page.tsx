@@ -328,7 +328,7 @@ const handleForge = (idea: Idea) => {
           {/* <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              AI Engine Online
+              A Online
             </span>
           </div> */}
         </div>

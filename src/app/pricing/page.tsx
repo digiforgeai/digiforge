@@ -7,6 +7,8 @@ import { Check, ArrowRight, Sparkles, Star, TrendingUp, Shield, Clock, GitBranch
 import { createClient } from '@/lib/supabase/client'
 import { getStripe } from '@/lib/stripe/client'
 import { PLANS, type PlanId } from '@/lib/pricing/types'
+import { trackEvent } from '@/lib/analytics'
+
 
 export default function PricingPage() {
   const [currentPlan, setCurrentPlan] = useState<PlanId | null>(null)
@@ -44,6 +46,7 @@ export default function PricingPage() {
 
   const handleSubscribe = async (planId: string, priceId: string) => {
     setLoadingPlan(planId)
+    trackEvent.checkoutStarted(planId)
     
     try {
       const response = await fetch('/api/create-checkout', {
@@ -53,6 +56,7 @@ export default function PricingPage() {
       })
       
       const data = await response.json()
+
       
       if (data.url) {
         window.location.href = data.url

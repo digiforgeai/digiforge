@@ -6,6 +6,8 @@ import { Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle2 } from 'lucide-
 import Link from 'next/link'
 import Image from 'next/image'
 import { sendWelcomeEmail } from '@/lib/email/service';
+import { trackEvent } from '@/lib/analytics'
+
 
 
 export default function SignupPage() {
@@ -38,6 +40,7 @@ const handleSignup = async () => {
   if (error) {
     setError(error.message)
   } else {
+    trackEvent.signup('email')
     // Call the API endpoint instead of direct function
     try {
       await fetch('/api/send-welcome-email', {

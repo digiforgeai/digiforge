@@ -29,6 +29,8 @@ import { toast } from "sonner";
 import { useSubscription } from "@/lib/hooks/useSubscription";
 import { ForgeError } from "@/components/ForgeError";
 import { Sliders, ChevronDown } from "lucide-react";
+import { trackEvent } from '@/lib/analytics'
+
 
 interface Idea {
   title: string;
@@ -259,7 +261,6 @@ const [pdfTemplate, setPdfTemplate] = useState<string>(() => {
     }
   };
   // ========== FETCH PHOTOS ==========
-  // ========== FETCH PHOTOS - IMPROVED WITH BETTER ERROR HANDLING ==========
   const fetchPhotos = useCallback(async (query: string) => {
     if (!query) return;
 
@@ -697,6 +698,8 @@ useEffect(() => {
               setEditedContent(data.content);
               setStep(5);
 
+               trackEvent.generateEbook(plan, effectiveChapterCount);
+
               await refreshUsage();
 
               // ========== SIMPLIFIED SAVE LOGIC - ALWAYS CREATE NEW RECORD ==========
@@ -815,6 +818,7 @@ useEffect(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       console.log("PDF download triggered successfully");
+      trackEvent.exportPDF(plan);
       setStep(6);
     } catch (err: any) {
       console.error("Export error details:", err);
@@ -889,6 +893,7 @@ useEffect(() => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      trackEvent.exportDOCX(plan);
 
       toast.success("DOCX exported successfully!");
     } catch (err: any) {
@@ -2131,6 +2136,8 @@ useEffect(() => {
                     setShowUpgradeModal(true);
                     return;
                   }
+                  trackEvent.regenerateEbook(plan);
+                  
                   setStep(4);
                   setTimeout(() => handleGenerate(false), 300);
                 }}
