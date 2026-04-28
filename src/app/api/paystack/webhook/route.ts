@@ -10,7 +10,6 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-// Verify Paystack signature
 function verifySignature(signature: string, body: string): boolean {
   const expectedSignature = crypto
     .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY!)
@@ -24,7 +23,6 @@ export async function POST(request: Request) {
   const headersList = await headers()
   const signature = headersList.get('x-paystack-signature') || ''
   
-  // Verify webhook signature (skip for local testing)
   if (process.env.NODE_ENV === 'production') {
     if (!verifySignature(signature, body)) {
       console.error('❌ Invalid Paystack signature')
@@ -36,12 +34,11 @@ export async function POST(request: Request) {
   console.log('📦 Paystack event received:', event.event)
   
   try {
-    // Handle successful charge (one-time payment or subscription)
+    // Handle successful charge
     if (event.event === 'charge.success') {
       const data = event.data
-      const { metadata, customer, plan } = data
+      const { metadata, customer } = data
       
-      // Extract user info from metadata
       const user_id = metadata?.user_id
       const plan_id = metadata?.plan_id
       
@@ -50,9 +47,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ received: true })
       }
       
-      console.log(`💰 Processing successful payment for user: ${user_id}, plan: ${plan_id}`)
+      console.log(`💰 Processing payment for user: ${user_id}, plan: ${plan_id}`)
+      console.log(`📝 Paystack Data - Customer Code: ${customer?.customer_code}`)
+      console.log(`📝 Paystack Data - Subscription Code: ${data.subscription?.subscription_code || 'N/A'}`)
       
-      // First, deactivate any existing active plans
+      // FIRST: Cancel any existing active plans for this user
       await supabase
         .from('user_plans')
         .update({ 
@@ -62,12 +61,11 @@ export async function POST(request: Request) {
         .eq('user_id', user_id)
         .eq('status', 'active')
       
-      // Calculate subscription period (30 days from now)
+      // SECOND: Insert the new subscription with Paystack data
       const now = new Date()
       const periodEnd = new Date()
       periodEnd.setDate(periodEnd.getDate() + 30)
       
-      // Insert new subscription
       const { error: insertError } = await supabase
         .from('user_plans')
         .insert({
@@ -76,6 +74,7 @@ export async function POST(request: Request) {
           status: 'active',
           paystack_subscription_code: data.subscription?.subscription_code || null,
           paystack_customer_code: customer?.customer_code || null,
+          paystack_plan_code: data.plan?.plan_code || null,
           current_period_start: now.toISOString(),
           current_period_end: periodEnd.toISOString(),
           cancel_at_period_end: false,
@@ -101,30 +100,11 @@ export async function POST(request: Request) {
           month: monthStr,
           ebook_generations_used: 0,
           updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,month'
         })
       
       console.log(`✅ Usage reset for user: ${user_id}`)
-    }
-    
-    // Handle subscription creation
-    if (event.event === 'subscription.create') {
-      const data = event.data
-      console.log(`📋 Subscription created: ${data.subscription_code}`)
-    }
-    
-    // Handle subscription renewal
-    if (event.event === 'subscription.not_renew') {
-      const data = event.data
-      console.log(`⚠️ Subscription not renewing: ${data.subscription_code}`)
-      
-      // Update user_plans to canceled
-      await supabase
-        .from('user_plans')
-        .update({ 
-          status: 'canceled', 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('paystack_subscription_code', data.subscription_code)
     }
     
     // Handle subscription disabled (cancelled)
@@ -132,13 +112,50 @@ export async function POST(request: Request) {
       const data = event.data
       console.log(`🔻 Subscription disabled: ${data.subscription_code}`)
       
-      await supabase
+      // Find the user by subscription code
+      const { data: userPlan } = await supabase
         .from('user_plans')
-        .update({ 
-          status: 'canceled', 
-          updated_at: new Date().toISOString() 
-        })
+        .select('user_id')
         .eq('paystack_subscription_code', data.subscription_code)
+        .single()
+      
+      if (userPlan) {
+        // Cancel the plan
+        await supabase
+          .from('user_plans')
+          .update({ 
+            status: 'canceled', 
+            updated_at: new Date().toISOString() 
+          })
+          .eq('paystack_subscription_code', data.subscription_code)
+        
+        // Check if user already has a free plan
+        const { data: existingFree } = await supabase
+          .from('user_plans')
+          .select('id')
+          .eq('user_id', userPlan.user_id)
+          .eq('plan_id', 'free')
+          .eq('status', 'active')
+          .single()
+        
+        if (!existingFree) {
+          // Create free plan
+          await supabase
+            .from('user_plans')
+            .insert({
+              user_id: userPlan.user_id,
+              plan_id: 'free',
+              status: 'active',
+              current_period_start: new Date().toISOString(),
+              current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              cancel_at_period_end: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+          
+          console.log(`✅ User ${userPlan.user_id} downgraded to free plan`)
+        }
+      }
     }
     
     return NextResponse.json({ received: true })
