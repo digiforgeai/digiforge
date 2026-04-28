@@ -2592,80 +2592,83 @@ useEffect(() => {
 </div>
           </div>
         )}
-        {/* Upgrade Modal */}
-        {showUpgradeModal && (
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => setShowUpgradeModal(false)}
+{/* Upgrade Modal - WITH OVERRIDE */}
+{showUpgradeModal && (
+  <div
+    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]"
+    style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    }}
+    onClick={() => setShowUpgradeModal(false)}
+  >
+    <div
+      className="bg-white rounded-2xl shadow-2xl"
+      style={{
+        width: '320px',
+        maxWidth: 'calc(100% - 2rem)',
+        margin: 'auto',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="p-5">
+        {/* Icon */}
+        <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mx-auto mb-3">
+          <Sparkles className="w-5 h-5 text-white" />
+        </div>
+
+        {/* Title */}
+        <h3 className="text-center font-black text-slate-900 text-base mb-1">
+          Upgrade to continue
+        </h3>
+        <p className="text-center text-xs text-slate-500 mb-4">
+          {usage.used}/{usage.limit} generations used
+        </p>
+
+        {/* Plan Buttons */}
+        <div className="space-y-2 mb-4">
+          <button
+            onClick={() => {
+              setShowUpgradeModal(false);
+              router.push("/pricing?plan=starter");
+            }}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition"
           >
-            <div
-              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-black text-slate-900">
-                  Upgrade to Continue
-                </h3>
-                <p className="text-sm text-slate-500 mt-2">
-                  {plan === "free"
-                    ? `You've used ${usage.used}/${usage.limit} free generations this month.`
-                    : `You've reached your ${plan} plan limit.`}
-                </p>
-              </div>
+            <span className="font-bold text-slate-800 text-sm">Starter</span>
+            <span className="font-bold text-indigo-600 text-sm">$9</span>
+          </button>
 
-              <div className="space-y-3 mb-6">
-                {plan === "free" && (
-                  <div className="border-2 border-indigo-200 rounded-xl p-4 bg-indigo-50">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-indigo-900">Starter</span>
-                      <span className="text-xs font-black text-indigo-600">
-                        $9/month
-                      </span>
-                    </div>
-                    <p className="text-xs text-indigo-700">
-                      15 generations/month • 6 chapters • No watermark
-                    </p>
-                  </div>
-                )}
-                <div
-                  className={`border-2 rounded-xl p-4 ${plan !== "pro" ? "border-purple-200 bg-purple-50" : "border-slate-200"}`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-purple-900">Pro</span>
-                    <span className="text-xs font-black text-purple-600">
-                      $19/month
-                    </span>
-                  </div>
-                  <p className="text-xs text-purple-700">
-                    50 generations/month • 12 chapters • Priority speed • DOCX
-                    export
-                  </p>
-                </div>
-              </div>
+          <button
+            onClick={() => {
+              setShowUpgradeModal(false);
+              router.push("/pricing?plan=pro");
+            }}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/30 transition"
+          >
+            <span className="font-bold text-slate-800 text-sm">Pro</span>
+            <span className="font-bold text-purple-600 text-sm">$19</span>
+          </button>
+        </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowUpgradeModal(false)}
-                  className="flex-1 border border-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-sm hover:bg-slate-50 transition"
-                >
-                  Maybe Later
-                </button>
-                <button
-                  onClick={() => {
-                    setShowUpgradeModal(false);
-                    router.push("/pricing?upgrade=true");
-                  }}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-md"
-                >
-                  View Plans
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Footer */}
+        <div className="text-center border-t border-slate-100 pt-3 mt-1">
+          <button
+            onClick={() => setShowUpgradeModal(false)}
+            className="text-xs text-slate-400 hover:text-slate-600 transition"
+          >
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
       </main>
     </div>
   );

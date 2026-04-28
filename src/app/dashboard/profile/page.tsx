@@ -675,7 +675,7 @@ export default function ProfilePage() {
                       </p>
                       <p className="text-[9px] sm:text-[10px] opacity-90 mt-1">
                         {currentPlan === "free"
-                          ? "5 generations/month • 5 chapters"
+                          ? "5 generations/month • 3 chapters"
                           : currentPlan === "starter"
                             ? "15 generations/month • 6 chapters • No watermark"
                             : "50 generations/month • 12 chapters • Priority speed • DOCX export"}
@@ -706,7 +706,7 @@ export default function ProfilePage() {
                           </span>
                           <span className="text-xs font-bold text-slate-900">
                             {currentPlan === "free"
-                              ? "5"
+                              ? "3"
                               : currentPlan === "starter"
                                 ? "6"
                                 : "12"}

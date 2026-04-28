@@ -2174,10 +2174,10 @@ drawFooter(tocPage, "Contents");
     // Personalized quote or message
     const quoteText =
       template === "corporate"
-        ? `"${userName}, excellence is not a skill. It's an attitude."`
+        ? `"Excellence is not a skill. It's an attitude."`
         : template === "minimal"
-          ? `"${userName}, start small. Think big."`
-          : `"${userName}, the best investment you can make is in yourself. Knowledge is the currency that never devalues."`;
+          ? `"Start small. Think big."`
+          : `"The best investment you can make is in yourself. Knowledge is the currency that never devalues."`;
 
     const qLines = wrapText(quoteText, ITAL, 14, TW - 30).filter(Boolean);
     let qy = H / 2 + 60;
