@@ -1,4 +1,5 @@
 // app/layout.tsx
+import Script from 'next/script'
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -80,6 +81,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <Script
+          src="https://js.paystack.co/v1/inline.js"
+          strategy="afterInteractive"
+        />
       <body className="root-layout">
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=yes" />
         <AuthProvider>
