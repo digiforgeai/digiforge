@@ -12,7 +12,6 @@
     "@anthropic-ai/sdk": "^0.90.0",
     "@google/generative-ai": "^0.24.1",
     "@react-email/components": "^1.0.12",
-    "@stripe/stripe-js": "^9.3.1",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
@@ -31,7 +30,6 @@
     "replicate": "^1.4.0",
     "resend": "^6.12.2",
     "sonner": "^2.0.7",
-    "stripe": "^22.1.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

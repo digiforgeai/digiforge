@@ -16,7 +16,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getStripe } from "@/lib/stripe/client";
 import { PLANS, type PlanId } from "@/lib/pricing/types";
 import { trackEvent } from "@/lib/analytics";
 
@@ -26,12 +25,6 @@ export default function PricingPage() {
   const [showComparison, setShowComparison] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const supabase = createClient();
-
-  // REPLACE THESE WITH YOUR ACTUAL STRIPE PRICE IDs from Stripe Dashboard
-  const STRIPE_PRICE_IDS = {
-    starter: "price_1TQSsSE2zT1ZW697eKmV3f2Q",
-    pro: "price_1TQStCE2zT1ZW697KoYjpPGv",
-  };
 
   useEffect(() => {
     fetchCurrentPlan();
@@ -85,41 +78,41 @@ export default function PricingPage() {
     }
   };
 
-const plansForDisplay = [
-  {
-    id: 'free',
-    name: PLANS.free.name,
-    price: PLANS.free.price,
-    description: PLANS.free.description,
-    features: PLANS.free.features,
-    badge: null,
-    cta: 'Get Started Free',
-    planCode: null,
-    highlight: false,
-  },
-  {
-    id: 'starter',
-    name: PLANS.starter.name,
-    price: PLANS.starter.price,
-    description: PLANS.starter.description,
-    features: PLANS.starter.features,
-    badge: 'Most Popular',
-    cta: 'Subscribe Now',
-    planCode: process.env.NEXT_PUBLIC_PAYSTACK_STARTER_PLAN_CODE,
-    highlight: true,
-  },
-  {
-    id: 'pro',
-    name: PLANS.pro.name,
-    price: PLANS.pro.price,
-    description: PLANS.pro.description,
-    features: PLANS.pro.features,
-    badge: null,
-    cta: 'Subscribe Now',
-    planCode: process.env.NEXT_PUBLIC_PAYSTACK_PRO_PLAN_CODE,
-    highlight: false,
-  },
-]
+  const plansForDisplay = [
+    {
+      id: 'free',
+      name: PLANS.free.name,
+      price: PLANS.free.price,
+      description: PLANS.free.description,
+      features: PLANS.free.features,
+      badge: null,
+      cta: 'Get Started Free',
+      planCode: null,
+      highlight: false,
+    },
+    {
+      id: 'starter',
+      name: PLANS.starter.name,
+      price: PLANS.starter.price,
+      description: PLANS.starter.description,
+      features: PLANS.starter.features,
+      badge: 'Most Popular',
+      cta: 'Subscribe Now',
+      planCode: process.env.NEXT_PUBLIC_PAYSTACK_STARTER_PLAN_CODE,
+      highlight: true,
+    },
+    {
+      id: 'pro',
+      name: PLANS.pro.name,
+      price: PLANS.pro.price,
+      description: PLANS.pro.description,
+      features: PLANS.pro.features,
+      badge: null,
+      cta: 'Subscribe Now',
+      planCode: process.env.NEXT_PUBLIC_PAYSTACK_PRO_PLAN_CODE,
+      highlight: false,
+    },
+  ];
 
   const comparisonFeatures = [
     {
@@ -176,16 +169,10 @@ const plansForDisplay = [
           </Link>
 
           <div className="hidden lg:flex items-center gap-6 xl:gap-10 text-xs font-bold uppercase tracking-widest text-zinc-500">
-            <Link
-              href="/#features"
-              className="hover:text-indigo-400 transition"
-            >
+            <Link href="/#features" className="hover:text-indigo-400 transition">
               Features
             </Link>
-            <Link
-              href="/#how-it-works"
-              className="hover:text-indigo-400 transition"
-            >
+            <Link href="/#how-it-works" className="hover:text-indigo-400 transition">
               Workflow
             </Link>
             <Link href="/#reviews" className="hover:text-indigo-400 transition">
