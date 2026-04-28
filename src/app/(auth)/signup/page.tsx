@@ -1,16 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { sendWelcomeEmail } from '@/lib/email/service';
 import { trackEvent } from '@/lib/analytics'
 
-
-
 export default function SignupPage() {
+  const searchParams = useSearchParams()
+  const planParam = searchParams.get('plan')
+  
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,29 +20,32 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const supabase = createClient()
-  
 
-const handleSignup = async () => {
-  if (!email || !password || !fullName) return
-  if (password.length < 8) { setError('Access Key must be at least 8 characters'); return }
-  
-  setLoading(true)
-  setError('')
-  
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: fullName },
-      emailRedirectTo: `${window.location.origin}/auth/callback`
+  const handleSignup = async () => {
+    if (!email || !password || !fullName) return
+    if (password.length < 8) { setError('Access Key must be at least 8 characters'); return }
+    
+    setLoading(true)
+    setError('')
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/auth/callback`
+      }
+    })
+    
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
     }
-  })
-  
-  if (error) {
-    setError(error.message)
-  } else {
+    
     trackEvent.signup('email')
-    // Call the API endpoint instead of direct function
+    
+    // Send welcome email
     try {
       await fetch('/api/send-welcome-email', {
         method: 'POST',
@@ -51,18 +55,44 @@ const handleSignup = async () => {
     } catch (emailError) {
       console.error('Failed to send welcome email:', emailError)
     }
+    
+    // Check for intended plan from sessionStorage
+    const intendedPlan = sessionStorage.getItem('intended_plan');
+    if (intendedPlan && planParam) {
+      const { planId, planCode } = JSON.parse(intendedPlan);
+      sessionStorage.removeItem('intended_plan');
+      
+      // Redirect to checkout with the plan
+      try {
+        const response = await fetch('/api/paystack/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planCode, planId }),
+        });
+        const responseData = await response.json();
+        if (responseData.url) {
+          window.location.href = responseData.url;
+          return;
+        }
+      } catch (err) {
+        console.error('Checkout redirect failed:', err);
+      }
+    }
+    
     setSuccess(true)
+    setLoading(false)
   }
-  
-  setLoading(false)
-}
 
-  const handleGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` }
-    })
+const handleGoogle = async () => {
+  const intendedPlan = sessionStorage.getItem('intended_plan');
+  if (intendedPlan) {
+    alert('Please complete signup, then subscribe to your plan from the pricing page.');
   }
+  await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: `${window.location.origin}/auth/callback` }
+  });
+};
 
   if (success) {
     return (

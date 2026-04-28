@@ -18,6 +18,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { PLANS, type PlanId } from "@/lib/pricing/types";
 import { trackEvent } from "@/lib/analytics";
+import { useRouter } from "next/navigation";
 
 export default function PricingPage() {
   const [currentPlan, setCurrentPlan] = useState<PlanId | null>(null);
@@ -25,6 +26,7 @@ export default function PricingPage() {
   const [showComparison, setShowComparison] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     fetchCurrentPlan();
@@ -49,34 +51,46 @@ export default function PricingPage() {
     }
   };
 
-  const handleSubscribe = async (planId: string, planCode: string) => {
-    setLoadingPlan(planId);
-
-    // Track checkout started
-    trackEvent.checkoutStarted(planId);
-
-    try {
-      const response = await fetch("/api/paystack/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planCode, planId }),
-      });
-
-      const data = await response.json();
-
-      if (data.url) {
-        // Redirect to Paystack payment page
-        window.location.href = data.url;
-      } else {
-        throw new Error(data.error || "No checkout URL returned");
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setLoadingPlan(null);
+const handleSubscribe = async (planId: string, planCode: string) => {
+  // First, check if user is logged in
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // If not logged in, redirect to signup with plan pre-selected
+  if (!user) {
+    // Store the plan they wanted in sessionStorage
+    sessionStorage.setItem('intended_plan', JSON.stringify({ planId, planCode }));
+    // Redirect to signup page with plan parameter
+    router.push(`/signup?plan=${planId}`);
+    return;
+  }
+  
+  // If logged in, proceed with checkout
+  setLoadingPlan(planId);
+  
+  // Track checkout started
+  trackEvent.checkoutStarted(planId);
+  
+  try {
+    const response = await fetch("/api/paystack/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planCode, planId }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      throw new Error(data.error || "No checkout URL returned");
     }
-  };
+  } catch (error) {
+    console.error("Error:", error);
+    alert("Something went wrong. Please try again.");
+  } finally {
+    setLoadingPlan(null);
+  }
+};
 
   const plansForDisplay = [
     {
@@ -488,7 +502,7 @@ export default function PricingPage() {
           <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8">
             <div className="flex items-center gap-2 text-zinc-600 text-[11px] md:text-sm">
               <Shield className="w-3.5 h-3.5 md:w-4 md:h-4" />
-              <span>Secure payment powered by Stripe</span>
+              <span>Secure payment powered by Paystack</span>
             </div>
             <div className="flex items-center gap-2 text-zinc-600 text-[11px] md:text-sm">
               <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />
