@@ -192,22 +192,27 @@ export default function LandingPage() {
         </p>
 
         {/* Demo Video Section */}
-        <div className="max-w-5xl mx-auto relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-[2.5rem] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
-          <div className="relative bg-[#161922] border border-white/5 rounded-[2.5rem] aspect-video overflow-hidden flex items-center justify-center group cursor-pointer shadow-2xl">
-            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80')] bg-cover bg-center opacity-40 group-hover:scale-105 transition-transform duration-700" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f1117] via-transparent to-transparent" />
+<div className="max-w-5xl mx-auto relative group">
+  {/* Glow effect */}
+  <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-[2.5rem] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
 
-            <div className="z-10 flex flex-col items-center">
-              <div className="w-20 h-20 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-2xl">
-                <Play className="w-8 h-8 text-white fill-white ml-1" />
-              </div>
-              <span className="mt-6 font-black text-xs tracking-[0.3em] text-white">
-                WATCH 60s FORGE DEMO
-              </span>
-            </div>
-          </div>
-        </div>
+  {/* Video container */}
+  <div className="relative bg-[#161922] border border-white/5 rounded-[2.5rem] aspect-video overflow-hidden shadow-2xl">
+
+    {/* Vimeo iframe */}
+    <iframe
+      src="https://player.vimeo.com/video/1187928532?autoplay=1&muted=1&loop=1"
+      className="w-full h-full"
+      frameBorder="0"
+      allow="autoplay; fullscreen; picture-in-picture"
+      allowFullScreen
+    />
+
+    {/* Optional overlay for subtle polish (can remove if you want pure video) */}
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0f1117]/40 via-transparent to-transparent" />
+
+  </div>
+</div>
       </section>
 
       {/* Feature Grid - UPDATED with REAL features */}
