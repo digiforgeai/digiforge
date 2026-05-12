@@ -27,10 +27,6 @@ import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import posthog from "posthog-js";
 
-useEffect(() => {
-  posthog.capture("homepage_loaded");
-}, []);
-
 // ─── Scroll-triggered animation hook ────────────────────────────────────────
 function useInView(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
@@ -278,6 +274,10 @@ export default function LandingPage() {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    posthog.capture("homepage_loaded");
+  }, []);
 
   // Parallax for hero blob
   useEffect(() => {
