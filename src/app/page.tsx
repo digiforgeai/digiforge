@@ -25,6 +25,11 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
+import posthog from "posthog-js";
+
+useEffect(() => {
+  posthog.capture("homepage_loaded");
+}, []);
 
 // ─── Scroll-triggered animation hook ────────────────────────────────────────
 function useInView(threshold = 0.15) {
