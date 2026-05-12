@@ -51,78 +51,83 @@ export default function PricingPage() {
     }
   };
 
-const handleSubscribe = async (planId: string, planCode: string) => {
-  // First, check if user is logged in
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  // If not logged in, redirect to signup with plan pre-selected
-  if (!user) {
-    // Store the plan they wanted in sessionStorage
-    sessionStorage.setItem('intended_plan', JSON.stringify({ planId, planCode }));
-    // Redirect to signup page with plan parameter
-    router.push(`/signup?plan=${planId}`);
-    return;
-  }
-  
-  // If logged in, proceed with checkout
-  setLoadingPlan(planId);
-  
-  // Track checkout started
-  trackEvent.checkoutStarted(planId);
-  
-  try {
-    const response = await fetch("/api/paystack/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planCode, planId }),
-    });
-    
-    const data = await response.json();
-    
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      throw new Error(data.error || "No checkout URL returned");
+  const handleSubscribe = async (planId: string, planCode: string) => {
+    // First, check if user is logged in
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    // If not logged in, redirect to signup with plan pre-selected
+    if (!user) {
+      // Store the plan they wanted in sessionStorage
+      sessionStorage.setItem(
+        "intended_plan",
+        JSON.stringify({ planId, planCode }),
+      );
+      // Redirect to signup page with plan parameter
+      router.push(`/signup?plan=${planId}`);
+      return;
     }
-  } catch (error) {
-    console.error("Error:", error);
-    alert("Something went wrong. Please try again.");
-  } finally {
-    setLoadingPlan(null);
-  }
-};
+
+    // If logged in, proceed with checkout
+    setLoadingPlan(planId);
+
+    // Track checkout started
+    trackEvent.checkoutStarted(planId);
+
+    try {
+      const response = await fetch("/api/paystack/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planCode, planId }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || "No checkout URL returned");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
 
   const plansForDisplay = [
     {
-      id: 'free',
+      id: "free",
       name: PLANS.free.name,
       price: PLANS.free.price,
       description: PLANS.free.description,
       features: PLANS.free.features,
       badge: null,
-      cta: 'Get Started Free',
+      cta: "Get Started Free",
       planCode: null,
       highlight: false,
     },
     {
-      id: 'starter',
+      id: "starter",
       name: PLANS.starter.name,
       price: PLANS.starter.price,
       description: PLANS.starter.description,
       features: PLANS.starter.features,
-      badge: 'Most Popular',
-      cta: 'Subscribe Now',
+      badge: "Most Popular",
+      cta: "Subscribe Now",
       planCode: process.env.NEXT_PUBLIC_PAYSTACK_STARTER_PLAN_CODE,
       highlight: true,
     },
     {
-      id: 'pro',
+      id: "pro",
       name: PLANS.pro.name,
       price: PLANS.pro.price,
       description: PLANS.pro.description,
       features: PLANS.pro.features,
       badge: null,
-      cta: 'Subscribe Now',
+      cta: "Subscribe Now",
       planCode: process.env.NEXT_PUBLIC_PAYSTACK_PRO_PLAN_CODE,
       highlight: false,
     },
@@ -183,10 +188,16 @@ const handleSubscribe = async (planId: string, planCode: string) => {
           </Link>
 
           <div className="hidden lg:flex items-center gap-6 xl:gap-10 text-xs font-bold uppercase tracking-widest text-zinc-500">
-            <Link href="/#features" className="hover:text-indigo-400 transition">
+            <Link
+              href="/#features"
+              className="hover:text-indigo-400 transition"
+            >
               Features
             </Link>
-            <Link href="/#how-it-works" className="hover:text-indigo-400 transition">
+            <Link
+              href="/#how-it-works"
+              className="hover:text-indigo-400 transition"
+            >
               Workflow
             </Link>
             <Link href="/#reviews" className="hover:text-indigo-400 transition">
@@ -289,7 +300,7 @@ const handleSubscribe = async (planId: string, planCode: string) => {
             SIMPLE, TRANSPARENT PRICING
           </div>
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white tracking-tighter mb-3 md:mb-4">
-            Forge Without Limits
+            Create Without Limits
           </h1>
           <p className="text-zinc-400 text-base md:text-lg max-w-xl mx-auto px-4">
             Start free. Upgrade when you're ready to scale. Cancel anytime.
